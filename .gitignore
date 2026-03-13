@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+
+# Data (user uploads and processing results — keep directory structure via .gitkeep)
+data/raw/*
+data/processed/*
+data/debug/*
+data/temp/*
+data/uploads/*
+data/edit_logs/*
+data/drive/*
+data/logs/*
+!data/**/.gitkeep
+*.db
+
+# Models (large binary files)
+data/models/*
+!data/models/.gitkeep
+!data/models/best_0828/
+
+# Logs
+logs/*
+!logs/.gitkeep
+*.log
+*.pid
+
+# Environment and secrets
+.env
+.env.local
+.env.production
+config.local.yaml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+*.png
+!frontend/public/**/*.png
+!docs/**/*.png
