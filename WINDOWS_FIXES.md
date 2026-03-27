@@ -158,7 +158,23 @@ if _HAS_FCNTL:
 
 ---
 
-### 5. `backend/api/ocr.py`
+### 5. `backend/core/ctc_patch.py`
+
+#### PaddleOCR 3.x `return_word_box` 인자 오류 수정
+```python
+# 수정 전
+def __call__(self, pred):
+
+# 수정 후
+def __call__(self, pred, **kwargs):
+```
+- **이유**: PaddleOCR 3.x가 CTC 디코더 호출 시 `return_word_box=True` 등 추가 키워드 인자를 전달하는데,
+  패치된 `__call__`이 고정 시그니처(`pred`만)여서 `TypeError` 발생.
+  `**kwargs`를 추가해 현재 및 미래 추가 인자를 모두 수용하도록 수정.
+
+---
+
+### 6. `backend/api/ocr.py`
 
 #### Windows 임시 파일 삭제 오류 수정 (WinError 32)
 ```python

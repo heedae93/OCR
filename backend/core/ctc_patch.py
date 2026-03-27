@@ -162,8 +162,8 @@ def patch_ctc_decoder():
             def __init__(self, character_list=None, use_space_char=True):
                 super().__init__(character_list, use_space_char=use_space_char)
 
-            def __call__(self, pred):
-                """apply - 문자별 confidence도 저장"""
+            def __call__(self, pred, **kwargs):
+                """apply - 문자별 confidence도 저장 (return_word_box 등 추가 인자 수용)"""
                 preds = np.array(pred[0])
                 preds_idx = preds.argmax(axis=-1)
                 preds_prob = preds.max(axis=-1)
