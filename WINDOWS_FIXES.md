@@ -203,6 +203,50 @@ finally:
 
 ---
 
+### 7. `frontend/src/components/UploadQueueModal.tsx` (신규)
+
+#### 7-1. 업로드 후 OCR 처리 시작 누락 버그 수정
+
+```typescript
+// 수정 전 (처리 시작 호출 없음)
+await fetch(`${API_BASE}/sessions/${sessionId}/documents`, { ... })
+await pollStatus(jobId, qf.id)   // ← queued 상태에서 영원히 대기
+
+// 수정 후
+await fetch(`${API_BASE}/sessions/${sessionId}/documents`, { ... })
+await fetch(`${API_BASE}/process/${jobId}`, { method: 'POST' })  // ← 추가
+await pollStatus(jobId, qf.id)
+```
+- **이유**: `/api/upload`는 파일 저장 및 job 생성만 하고 OCR을 시작하지 않음.
+  반드시 `POST /api/process/{job_id}`를 호출해야 OCR 워커가 실행됨.
+  누락 시 파일이 `queued` 상태에서 멈춤.
+
+#### 7-2. 다중 파일 업로드 큐 모달 구현 (FileZilla 방식)
+
+- **변경 내용**: 기존 단순 업로드 모달 → 파일별 진행률 표시 큐 방식으로 교체
+- **업로드 진행률**: XHR `upload.onprogress` 이벤트로 0~50% 표시
+- **OCR 진행률**: `GET /api/status/{job_id}` 2초 폴링으로 50~100% 표시
+- **파일 선택**: `window.showOpenFilePicker()` (File System Access API) 사용 — 네이티브 탐색기에서 다중 선택 가능
+- **순차 처리**: GPU 메모리 충돌 방지를 위해 파일 1개씩 순차 처리
+
+#### 7-3. 백그라운드 처리 지원
+
+- **변경 내용**: 모달을 닫아도 OCR 처리가 백그라운드에서 계속 진행
+- **구현**: 모달을 조건부 렌더링(`&&`) 대신 `visible` prop + `hidden` 클래스로 제어 (컴포넌트 언마운트 방지)
+- **플로팅 위젯**: 처리 중 모달을 닫으면 오른쪽 하단에 진행 상황 표시 버튼 노출
+
+---
+
+### 8. `frontend/src/app/icon.svg` (신규)
+
+#### 파비콘 추가
+
+- **변경 내용**: 기본 Next.js 파비콘 → 앱 전용 SVG 아이콘 적용
+- **디자인**: 파란 그라데이션 배경 + 흰색 문서 + OCR 스캔 라인
+- **적용 방법**: Next.js App Router의 `app/icon.svg` 규칙으로 자동 적용 (별도 설정 불필요)
+
+---
+
 ## 설치된 패키지
 
 | 패키지 | 버전 | 비고 |
