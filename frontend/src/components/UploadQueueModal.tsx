@@ -186,7 +186,10 @@ export default function UploadQueueModal({ onClose, onComplete }: Props) {
           body: JSON.stringify({ job_id: jobId })
         })
 
-        // c. Poll status
+        // c. Start OCR processing
+        await fetch(`${API_BASE}/process/${jobId}`, { method: 'POST' })
+
+        // d. Poll status
         await pollStatus(jobId, qf.id)
       } catch (err) {
         updateFile(qf.id, {
