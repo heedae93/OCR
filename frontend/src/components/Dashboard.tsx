@@ -49,6 +49,7 @@ export default function Dashboard() {
   const [recentSessions, setRecentSessions] = useState<Session[]>([])
   const [showNewSessionModal, setShowNewSessionModal] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [bgStats, setBgStats] = useState<{ total: number; completed: number; failed: number; isRunning: boolean } | null>(null)
 
   const API_BASE = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5015'}/api`
 
@@ -324,15 +325,33 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* New Session Modal */}
-      {showNewSessionModal && (
-        <UploadQueueModal
-          onClose={() => setShowNewSessionModal(false)}
-          onComplete={() => {
-            fetchData()
-            setShowNewSessionModal(false)
-          }}
-        />
+      {/* Upload Queue Modal - 항상 마운트, visibility로 제어 */}
+      <UploadQueueModal
+        visible={showNewSessionModal}
+        onClose={() => setShowNewSessionModal(false)}
+        onComplete={() => {
+          fetchData()
+          setShowNewSessionModal(false)
+        }}
+        onProcessingChange={(stats) => {
+          setBgStats(stats.isRunning || stats.total > 0 ? stats : null)
+        }}
+      />
+
+      {/* 백그라운드 처리 중 플로팅 위젯 */}
+      {bgStats && bgStats.isRunning && !showNewSessionModal && (
+        <button
+          onClick={() => setShowNewSessionModal(true)}
+          className="fixed bottom-6 right-6 flex items-center gap-3 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-xl z-40 transition-colors"
+        >
+          <div className="relative">
+            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          </div>
+          <div className="text-left">
+            <p className="text-sm font-semibold leading-none">OCR 처리 중</p>
+            <p className="text-xs text-blue-200 mt-0.5">{bgStats.completed}/{bgStats.total} 완료</p>
+          </div>
+        </button>
       )}
     </div>
   )
