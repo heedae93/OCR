@@ -11,9 +11,9 @@ cd "$SCRIPT_DIR"
 
 # ── config.yaml에서 설정 읽기 ──────────────────────────────
 read_config() {
-    python3 -c "
+    python -c "
 import yaml, sys
-with open('config.yaml', 'r') as f:
+with open('config.yaml', 'r', encoding='utf-8') as f:
     cfg = yaml.safe_load(f)
 server = cfg.get('server', {})
 be = server.get('backend', {})
@@ -47,13 +47,18 @@ echo "  Frontend: http://${FRONTEND_HOST}:${FRONTEND_PORT}"
 echo "========================================"
 
 # ── 이미 실행 중인지 확인 ──────────────────────────────────
-if lsof -i:"$BACKEND_PORT" -sTCP:LISTEN -t > /dev/null 2>&1; then
+port_in_use() {
+    netstat -an 2>/dev/null | grep -q ":$1 .*LISTEN" || \
+    netstat -an 2>/dev/null | grep -q ":$1 .*LISTENING"
+}
+
+if port_in_use "$BACKEND_PORT"; then
     echo "[WARN] Backend port $BACKEND_PORT already in use. Stop existing server first."
     echo "       Run: ./stop.sh"
     exit 1
 fi
 
-if lsof -i:"$FRONTEND_PORT" -sTCP:LISTEN -t > /dev/null 2>&1; then
+if port_in_use "$FRONTEND_PORT"; then
     echo "[WARN] Frontend port $FRONTEND_PORT already in use. Stop existing server first."
     echo "       Run: ./stop.sh"
     exit 1
@@ -65,6 +70,10 @@ mkdir -p logs
 # ── Frontend .env.local 설정 ───────────────────────────────
 # 이미 .env.local이 존재하면 그대로 사용 (수동 설정 존중)
 SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+if [ -z "$SERVER_IP" ]; then
+    # Windows fallback: ipconfig로 IPv4 주소 추출
+    SERVER_IP=$(ipconfig 2>/dev/null | grep -m1 "IPv4" | awk '{print $NF}' | tr -d '\r')
+fi
 if [ -z "$SERVER_IP" ]; then
     SERVER_IP="localhost"
 fi

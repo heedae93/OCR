@@ -10,6 +10,23 @@ from config import Config
 # Set CUDA_VISIBLE_DEVICES from config (before importing paddle)
 os.environ['CUDA_VISIBLE_DEVICES'] = Config.CUDA_VISIBLE_DEVICES
 
+# paddleocr과 layout_detector가 각각 paddlex를 import할 때 "already initialized" 오류 방지
+# EAGER_INITIALIZATION=False → repo_manager.initialize()를 지연 초기화로 전환
+os.environ.setdefault('PADDLE_PDX_EAGER_INIT', '0')
+
+# langchain 1.x에서 제거된 langchain.docstore 호환 shim (paddlex 내부에서 사용)
+import sys, types
+try:
+    from langchain_community.docstore.document import Document as _LCDocument
+    _ds_mod = types.ModuleType("langchain.docstore")
+    _ds_doc_mod = types.ModuleType("langchain.docstore.document")
+    _ds_doc_mod.Document = _LCDocument
+    _ds_mod.document = _ds_doc_mod
+    sys.modules.setdefault("langchain.docstore", _ds_mod)
+    sys.modules.setdefault("langchain.docstore.document", _ds_doc_mod)
+except ImportError:
+    pass
+
 # Set cuDNN/cuBLAS library paths
 if not Config.GPU_AUTO_DETECT_LIBS:
     # Use manually specified paths from config.yaml
@@ -24,11 +41,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-# CTC patch (must be applied before PaddleOCR import)
+# Import CTC patch module (paddlex 초기화는 patch_ctc_decoder() 호출 시 발생)
 from core.ctc_patch import patch_ctc_decoder
-patch_ctc_decoder()
 
+# PaddleOCR/paddlex 먼저 임포트 (paddlex 초기화 1회 수행)
 from api import ocr, storage, drive, jobs, sessions, settings, export
+
+# CTC patch는 paddleocr 임포트 이후에 적용 (paddlex 재초기화 충돌 방지)
+patch_ctc_decoder()
 from database import init_db
 
 # Configure logging

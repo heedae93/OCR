@@ -86,13 +86,17 @@ async def preload_all_models():
             # Create a small test image
             dummy_img = Image.new('RGB', (100, 30), color='white')
             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
-                dummy_img.save(f.name)
+                tmp_path = f.name
+            dummy_img.save(tmp_path)
+            try:
+                engine.predict(tmp_path)  # Warm up
+            except:
+                pass  # Ignore errors on dummy image
+            finally:
                 try:
-                    engine.predict(f.name)  # Warm up
-                except:
-                    pass  # Ignore errors on dummy image
-                finally:
-                    os.unlink(f.name)
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
             logger.info(f"OCR engine for GPU {gpu_id} ready!")
         except Exception as e:

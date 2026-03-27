@@ -3,8 +3,14 @@ Session management API endpoints
 """
 import logging
 import json
-import fcntl
 import zipfile
+
+# fcntl은 Unix 전용 - Windows에서는 파일 잠금 없이 동작
+try:
+    import fcntl
+    _HAS_FCNTL = True
+except ImportError:
+    _HAS_FCNTL = False
 import io
 import os
 from typing import List, Optional
@@ -117,11 +123,13 @@ def save_export_status(export_id: str, status: dict):
     status["updated_at"] = datetime.now().isoformat()
     try:
         with open(status_file, 'w') as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            if _HAS_FCNTL:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
             json.dump(status, f)
             f.flush()  # Flush buffer to OS
             os.fsync(f.fileno())  # Ensure data is written to disk
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            if _HAS_FCNTL:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         logger.debug(f"Export status saved: {export_id} -> {status.get('status')}")
     except Exception as e:
         logger.error(f"Failed to save export status: {e}")
@@ -134,9 +142,11 @@ def read_export_status(export_id: str) -> Optional[dict]:
         return None
     try:
         with open(status_file, 'r') as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+            if _HAS_FCNTL:
+                fcntl.flock(f.fileno(), fcntl.LOCK_SH)
             data = json.load(f)
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            if _HAS_FCNTL:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
             return data
     except Exception as e:
         logger.error(f"Failed to read export status: {e}")

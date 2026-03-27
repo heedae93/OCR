@@ -4,8 +4,15 @@ Job management for OCR processing
 import logging
 import json
 import os
-import fcntl
+import sys
 from pathlib import Path
+
+# fcntl은 Unix 전용 - Windows에서는 파일 잠금 없이 동작
+try:
+    import fcntl
+    _HAS_FCNTL = True
+except ImportError:
+    _HAS_FCNTL = False
 from typing import Dict, Optional
 from datetime import datetime
 from models.job import Job, JobStatus
@@ -42,11 +49,13 @@ class JobManager:
                 "pdf_url": job.pdf_url,
                 "updated_at": datetime.now().isoformat()
             }
-            # Atomic write with file locking
+            # Atomic write with file locking (Unix only)
             with open(status_file, 'w') as f:
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                if _HAS_FCNTL:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
                 json.dump(status_data, f)
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                if _HAS_FCNTL:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         except Exception as e:
             logger.warning(f"Failed to save status file for {job_id}: {e}")
 
@@ -57,9 +66,11 @@ class JobManager:
             status_file = STATUS_DIR / f"{job_id}.json"
             if status_file.exists():
                 with open(status_file, 'r') as f:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+                    if _HAS_FCNTL:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_SH)
                     data = json.load(f)
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                    if _HAS_FCNTL:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
                     return data
         except Exception as e:
             logger.warning(f"Failed to read status file for {job_id}: {e}")

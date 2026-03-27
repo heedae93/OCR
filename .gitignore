@@ -63,3 +63,4 @@ Thumbs.db
 *.png
 !frontend/public/**/*.png
 !docs/**/*.png
+=*
