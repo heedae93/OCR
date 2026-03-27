@@ -11,9 +11,9 @@ import {
   Calendar,
   Zap,
   BarChart3,
-  AlertCircle,
-  Plus
+  AlertCircle
 } from 'lucide-react'
+import UploadQueueModal from './UploadQueueModal'
 
 interface Session {
   session_id: string
@@ -48,8 +48,6 @@ export default function Dashboard() {
   })
   const [recentSessions, setRecentSessions] = useState<Session[]>([])
   const [showNewSessionModal, setShowNewSessionModal] = useState(false)
-  const [newSessionName, setNewSessionName] = useState('')
-  const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(true)
 
   const API_BASE = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5015'}/api`
@@ -98,80 +96,6 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const createSessionAndUpload = async () => {
-    if (!newSessionName.trim() || !uploadFile) {
-      alert('세션 이름과 파일을 모두 입력해주세요')
-      return
-    }
-
-    try {
-      // 1. Create session
-      const sessionResponse = await fetch(`${API_BASE}/sessions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_name: newSessionName,
-          description: `${uploadFile.name}으로 시작된 세션`
-        })
-      })
-
-      if (!sessionResponse.ok) {
-        throw new Error('세션 생성 실패')
-      }
-
-      const sessionData = await sessionResponse.json()
-      const sessionId = sessionData.session_id
-
-      // 2. Upload file
-      const formData = new FormData()
-      formData.append('file', uploadFile)
-
-      const uploadResponse = await fetch(`${API_BASE}/upload`, {
-        method: 'POST',
-        body: formData
-      })
-
-      if (!uploadResponse.ok) {
-        throw new Error('파일 업로드 실패')
-      }
-
-      const uploadData = await uploadResponse.json()
-      const jobId = uploadData.job_id
-
-      // 3. Add to session
-      await fetch(`${API_BASE}/sessions/${sessionId}/documents`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ job_id: jobId })
-      })
-
-      // Reset and refresh
-      setNewSessionName('')
-      setUploadFile(null)
-      setShowNewSessionModal(false)
-      await fetchData()
-
-      // Navigate to editor (user can start OCR from there)
-      router.push(`/editor/${jobId}`)
-    } catch (error) {
-      console.error('Failed to create session:', error)
-      alert('세션 생성 및 업로드 실패')
-    }
-  }
-
-  const handleFileSelect = () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.pdf,.png,.jpg,.jpeg'
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (file) {
-        setUploadFile(file)
-      }
-    }
-    input.click()
   }
 
   const formatDate = (dateString: string) => {
@@ -402,75 +326,13 @@ export default function Dashboard() {
 
       {/* New Session Modal */}
       {showNewSessionModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-[500px] max-w-full mx-4">
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">
-              빠른 OCR 작업 시작
-            </h3>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  세션 이름
-                </label>
-                <input
-                  type="text"
-                  value={newSessionName}
-                  onChange={(e) => setNewSessionName(e.target.value)}
-                  placeholder="예: 2024년 보고서 OCR"
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  첫 번째 파일
-                </label>
-                <div
-                  onClick={handleFileSelect}
-                  className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
-                >
-                  {uploadFile ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <FileText className="w-5 h-5 text-blue-600" />
-                      <span className="text-sm text-gray-900 dark:text-white">
-                        {uploadFile.name}
-                      </span>
-                    </div>
-                  ) : (
-                    <div>
-                      <Plus className="w-8 h-8 mx-auto text-gray-400 mb-2" />
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        PDF, PNG, JPG 파일 선택
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3 justify-end mt-6">
-              <button
-                onClick={() => {
-                  setShowNewSessionModal(false)
-                  setNewSessionName('')
-                  setUploadFile(null)
-                }}
-                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg"
-              >
-                취소
-              </button>
-              <button
-                onClick={createSessionAndUpload}
-                disabled={!newSessionName.trim() || !uploadFile}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                <Zap className="w-4 h-4" />
-                시작하기
-              </button>
-            </div>
-          </div>
-        </div>
+        <UploadQueueModal
+          onClose={() => setShowNewSessionModal(false)}
+          onComplete={() => {
+            fetchData()
+            setShowNewSessionModal(false)
+          }}
+        />
       )}
     </div>
   )
