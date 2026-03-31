@@ -150,12 +150,12 @@ export default function JobsPage() {
           <h1 className="text-3xl font-bold text-text-primary-light dark:text-text-primary-dark">
             작업 내역
           </h1>
-          <button
+          {/* <button
             onClick={() => router.push('/')}
             className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
           >
             새 작업 시작
-          </button>
+          </button> */}
         </div>
 
         {/* Statistics Cards */}

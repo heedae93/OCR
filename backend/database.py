@@ -177,23 +177,23 @@ def init_db():
         # Create default user if not exists
         db = SessionLocal()
         try:
-            default_user = db.query(User).filter_by(user_id="default").first()
+            default_user = db.query(User).filter_by(user_id=Config.DEFAULT_USER_ID).first()
             if not default_user:
                 default_user = User(
-                    user_id="default",
-                    username="default_user",
-                    email="default@ocr-gen.local"
+                    user_id=Config.DEFAULT_USER_ID,
+                    username=Config.DEFAULT_USER_NAME,
+                    email=Config.DEFAULT_USER_EMAIL
                 )
                 db.add(default_user)
                 db.commit()
-                logger.info("Default user created")
+                logger.info(f"Default user created: {Config.DEFAULT_USER_ID}")
 
             # Create default session if not exists
             default_session = db.query(Session).filter_by(session_id="default").first()
             if not default_session:
                 default_session = Session(
                     session_id="default",
-                    user_id="default",
+                    user_id=Config.DEFAULT_USER_ID,
                     session_name="기본 세션",
                     description="자동 생성된 기본 세션입니다."
                 )

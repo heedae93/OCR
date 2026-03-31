@@ -315,7 +315,7 @@ def _merge_ocr_lines(blocks: List[Dict], y_threshold: float = 6.0, x_gap: float 
 
 
 @router.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+def upload_file(file: UploadFile = File(...)):
     """Upload a file for OCR processing"""
     try:
         # Validate file type
@@ -426,7 +426,7 @@ async def upload_file(file: UploadFile = File(...)):
 
 
 @router.get("/page-image/{job_id}/{page_number}")
-async def get_page_image(job_id: str, page_number: int):
+def get_page_image(job_id: str, page_number: int):
     """Get a specific page image for rendering"""
     try:
         # Check in processed directory
@@ -450,7 +450,7 @@ async def get_page_image(job_id: str, page_number: int):
 
 
 @router.post("/process/{job_id}")
-async def process_job(job_id: str, background_tasks: BackgroundTasks):
+def process_job(job_id: str, background_tasks: BackgroundTasks):
     """Start OCR processing for a job"""
     try:
         job = job_manager.get_job(job_id)
@@ -514,7 +514,7 @@ async def process_job(job_id: str, background_tasks: BackgroundTasks):
 
 
 @router.post("/cancel/{job_id}")
-async def cancel_job(job_id: str):
+def cancel_job(job_id: str):
     """Cancel an OCR processing job"""
     try:
         job = job_manager.get_job(job_id)
@@ -540,7 +540,7 @@ async def cancel_job(job_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def process_job_task(job_id: str):
+def process_job_task(job_id: str):
     """
     Background task for OCR processing with improved text scaling
 
