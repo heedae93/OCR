@@ -13,7 +13,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: '/', icon: 'dashboard', label: '대시보드' },
   { href: '/jobs', icon: 'history', label: '작업 내역' },
-  { href: '/drive', icon: 'folder', label: '내 드라이브' },
+  // { href: '/drive', icon: 'folder', label: '내 드라이브' },
   { href: '/settings', icon: 'settings', label: '설정' },
   { href: '/help', icon: 'help', label: '도움말' },
 ]
@@ -24,7 +24,7 @@ export default function Sidebar() {
   const isActive = (path: string) => pathname === path
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark sticky top-0">
+    <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark sticky top-0">
       <div className="flex flex-col gap-4 p-4 h-full">
         {/* Logo */}
         <Link href="/" className="flex gap-3 items-center px-2 py-3 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200 group">
@@ -33,7 +33,7 @@ export default function Sidebar() {
           </div>
           <div className="flex flex-col">
             <h1 className="text-text-primary-light dark:text-text-primary-dark text-base font-bold leading-tight tracking-tight">
-              BabelBrain
+              Futurenuri
             </h1>
             <p className="text-primary text-xs font-semibold tracking-wider uppercase">
               PDFix

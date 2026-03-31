@@ -3,7 +3,7 @@ import './globals.css'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 
 export const metadata: Metadata = {
-  title: 'BabelBrain PDFix',
+  title: 'Futurenuri PDFix',
   description: 'Powerful multilingual OCR with searchable PDF generation',
 }
 

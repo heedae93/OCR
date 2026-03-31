@@ -594,7 +594,7 @@ export default function EditorPage() {
             >
               <span className="material-symbols-outlined text-3xl">document_scanner</span>
               <h1 className="text-lg font-bold text-text-primary-light dark:text-text-primary-dark">
-                BabelBrain PDFix
+                Futurenuri PDFix
               </h1>
             </button>
             <div className="hidden md:flex items-center gap-2">
@@ -631,7 +631,7 @@ export default function EditorPage() {
                 </>
               )}
             </div>
-            <div className="flex items-center gap-1 sm:gap-2">
+            {/* <div className="flex items-center gap-1 sm:gap-2">
               <button className="group flex h-9 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-transparent text-text-secondary-light dark:text-text-secondary-dark hover:bg-black/5 dark:hover:bg-white/10 relative">
                 <span className="material-symbols-outlined text-xl">undo</span>
                 <span className="absolute bottom-[-24px] group-hover:bottom-1.5 transition-all duration-200 text-xs bg-gray-700 text-white px-1.5 py-0.5 rounded-sm whitespace-nowrap">
@@ -644,7 +644,7 @@ export default function EditorPage() {
                   Ctrl+Y
                 </span>
               </button>
-            </div>
+            </div> */}
             <div className="h-6 w-px bg-border-light dark:bg-border-dark"></div>
             <ThemeToggle />
             <div className="h-6 w-px bg-border-light dark:bg-border-dark"></div>
@@ -657,10 +657,10 @@ export default function EditorPage() {
                 <span className="material-symbols-outlined text-xl">data_object</span>
                 <span className="hidden sm:inline">데이터</span>
               </button>
-              <button className="flex h-9 cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg bg-transparent px-3 text-sm font-medium text-text-secondary-light dark:text-text-secondary-dark hover:bg-black/5 dark:hover:bg-white/10">
+              {/* <button className="flex h-9 cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg bg-transparent px-3 text-sm font-medium text-text-secondary-light dark:text-text-secondary-dark hover:bg-black/5 dark:hover:bg-white/10">
                 <span className="material-symbols-outlined text-xl">share</span>
                 <span className="hidden sm:inline">공유</span>
-              </button>
+              </button> */}
               <button
                 onClick={() => setShowExportModal(true)}
                 className="flex h-9 cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg bg-primary px-3 text-sm font-bold text-white hover:bg-primary/90"
