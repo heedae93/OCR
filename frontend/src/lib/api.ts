@@ -155,6 +155,15 @@ export const mergePDFs = async (filePaths: string[], outputName: string): Promis
   return response.data.file
 }
 
+export const downloadDriveFile = async (path: string): Promise<File> => {
+  const response = await api.get(`/drive/download`, {
+    params: { path },
+    responseType: 'blob',
+  })
+  const filename = path.split('/').pop() || 'file'
+  return new File([response.data], filename, { type: response.data.type })
+}
+
 export const splitPDF = async (filePath: string, pageRanges: [number, number][]): Promise<DriveItem[]> => {
   const response = await api.post('/drive/split-pdf', {
     file_path: filePath,

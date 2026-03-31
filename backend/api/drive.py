@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 from typing import List, Optional
 from pydantic import BaseModel
 import os
@@ -269,6 +270,24 @@ async def merge_pdfs(merge: PDFMerge):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to merge PDFs: {str(e)}")
+
+@router.get("/download")
+async def download_file(path: str):
+    """Download a file from the drive"""
+    full_path = get_full_path(path)
+
+    if not os.path.exists(full_path):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if os.path.isdir(full_path):
+        raise HTTPException(status_code=400, detail="Cannot download a folder")
+
+    return FileResponse(
+        path=full_path,
+        filename=os.path.basename(full_path),
+        media_type="application/octet-stream"
+    )
+
 
 @router.post("/split-pdf")
 async def split_pdf(split: PDFSplit):

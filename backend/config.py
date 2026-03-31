@@ -228,10 +228,17 @@ class Config:
                 cls.CORS_ORIGINS = server["cors_origins"]
             else:
                 # Auto-generate CORS origins from frontend port
+                import socket
                 cls.CORS_ORIGINS = [
                     f"http://localhost:{cls.FRONTEND_PORT}",
                     f"http://127.0.0.1:{cls.FRONTEND_PORT}",
                 ]
+                try:
+                    local_ip = socket.gethostbyname(socket.gethostname())
+                    if local_ip and local_ip != "127.0.0.1":
+                        cls.CORS_ORIGINS.append(f"http://{local_ip}:{cls.FRONTEND_PORT}")
+                except Exception:
+                    pass
 
 
 # Initialize configuration
