@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { useState, useRef, useEffect } from 'react'
 
 interface NavItem {
   href: string
@@ -21,8 +22,27 @@ const navItems: NavItem[] = [
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [user, setUser] = useState<{ name: string; username: string } | null>(null)
+
+  useEffect(() => {
+    const stored = localStorage.getItem('user')
+    if (stored) setUser(JSON.parse(stored))
+  }, [])
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const isActive = (path: string) => pathname === path
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark sticky top-0">
@@ -96,26 +116,41 @@ export default function Sidebar() {
         </div>
 
         {/* User Info */}
-        <div className="flex flex-col gap-1 border-t border-border-light dark:border-border-dark pt-4">
-          <div className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200 cursor-pointer">
+        <div ref={menuRef} className="flex flex-col gap-1 border-t border-border-light dark:border-border-dark pt-4">
+          <div
+            onClick={() => setUserMenuOpen(!userMenuOpen)}
+            className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200 cursor-pointer"
+          >
             <div className="relative">
               <div className="bg-gradient-to-br from-primary to-primary/70 rounded-full size-9 flex items-center justify-center text-white font-semibold text-sm shadow-md">
-                U
+                {(user?.name || user?.username || 'U')[0].toUpperCase()}
               </div>
               <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-surface-light dark:border-surface-dark" />
             </div>
             <div className="flex flex-col flex-1 min-w-0">
               <p className="text-text-primary-light dark:text-text-primary-dark text-sm font-semibold leading-tight truncate">
-                사용자
+                {user?.name || '사용자'}
               </p>
               <p className="text-text-secondary-light dark:text-text-secondary-dark text-xs truncate">
-                user@email.com
+                {user?.username || ''}
               </p>
             </div>
-            <span className="material-symbols-outlined text-text-secondary-light dark:text-text-secondary-dark text-lg">
+            <span className={`material-symbols-outlined text-text-secondary-light dark:text-text-secondary-dark text-lg transition-transform duration-200 ${userMenuOpen ? 'rotate-180' : ''}`}>
               expand_more
             </span>
           </div>
+          {/* 드롭다운 메뉴 */}
+          {userMenuOpen && (
+            <div className="mt-1 rounded-xl border border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark shadow-lg overflow-hidden">
+              <button
+                onClick={() => router.push('/logout')}
+                className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors duration-150"
+              >
+                <span className="material-symbols-outlined text-lg">logout</span>
+                로그아웃
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </aside>

@@ -7,9 +7,9 @@ export default function LogoutPage() {
   const router = useRouter()
 
   useEffect(() => {
-    // 로그아웃 로직 (현재는 단순히 홈으로 리다이렉트)
+    localStorage.removeItem('user')
     setTimeout(() => {
-      router.push('/')
+      router.replace('/login')
     }, 1000)
   }, [router])
 

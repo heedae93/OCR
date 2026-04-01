@@ -45,7 +45,7 @@ from fastapi.staticfiles import StaticFiles
 from core.ctc_patch import patch_ctc_decoder
 
 # PaddleOCR/paddlex 먼저 임포트 (paddlex 초기화 1회 수행)
-from api import ocr, storage, drive, jobs, sessions, settings, export
+from api import ocr, storage, drive, jobs, sessions, settings, export, auth
 
 # CTC patch는 paddleocr 임포트 이후에 적용 (paddlex 재초기화 충돌 방지)
 patch_ctc_decoder()
@@ -83,6 +83,7 @@ app.include_router(jobs.router, prefix="/api", tags=["Jobs"])
 app.include_router(sessions.router, prefix="/api", tags=["Sessions"])
 app.include_router(settings.router, tags=["Settings"])
 app.include_router(export.router, tags=["Export"])
+app.include_router(auth.router, prefix="/api", tags=["Auth"])
 
 # Mount static files
 try:

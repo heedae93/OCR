@@ -36,7 +36,9 @@ class User(Base):
 
     user_id = Column(String(36), primary_key=True)
     username = Column(String(100), unique=True, nullable=False)
+    name = Column(String(100), nullable=True)
     email = Column(String(255), unique=True, nullable=True)
+    password_hash = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     last_login = Column(DateTime, nullable=True)
     total_jobs = Column(Integer, default=0)
