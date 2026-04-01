@@ -37,7 +37,7 @@ data/drive/*
 data/logs/*
 !data/**/.gitkeep
 *.db
-!data/ocr_gen.db
+
 
 # Models (large binary files)
 data/models/*

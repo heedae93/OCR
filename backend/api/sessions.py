@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session as DBSession
 from PyPDF2 import PdfMerger, PdfReader, PdfWriter
 
-from database import get_db, Session, SessionDocument, Job, SessionLocal
+from database import get_db, Session, SessionDocument, Job, SessionLocal, User
 from utils.file_utils import generate_unique_id
 from config import Config
 
@@ -163,9 +163,16 @@ async def create_session(
     try:
         session_id = generate_unique_id()
 
+        # Find the user where 'username' or 'user_id' is 'futurenuri'
+        futurenuri_user = db.query(User).filter(
+            (User.username == "futurenuri") | (User.user_id == "futurenuri")
+        ).first()
+
+        actual_user_id = futurenuri_user.user_id if futurenuri_user else user_id
+
         new_session = Session(
             session_id=session_id,
-            user_id=user_id,
+            user_id=actual_user_id,
             session_name=request.session_name,
             description=request.description
         )
