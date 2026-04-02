@@ -31,6 +31,9 @@ class Config:
         "http://127.0.0.1:5017",
     ]
 
+    # Database settings
+    DATABASE_URL: Optional[str] = None
+
     # GPU settings
     CUDA_VISIBLE_DEVICES = os.getenv("CUDA_VISIBLE_DEVICES", "0")
     AVAILABLE_GPU_IDS: List[int] = [0]
@@ -214,6 +217,11 @@ class Config:
             cls.DEFAULT_USER_ID = user.get("default_id", cls.DEFAULT_USER_ID)
             cls.DEFAULT_USER_NAME = user.get("default_name", cls.DEFAULT_USER_NAME)
             cls.DEFAULT_USER_EMAIL = user.get("default_email", cls.DEFAULT_USER_EMAIL)
+
+        # Update database settings
+        if "database" in config_data:
+            db_config = config_data["database"]
+            cls.DATABASE_URL = db_config.get("url", cls.DATABASE_URL)
 
         # Update server settings
         if "server" in config_data:

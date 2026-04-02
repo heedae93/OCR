@@ -247,37 +247,44 @@ await pollStatus(jobId, qf.id)
 
 ---
 
-## 설치된 패키지
+### 9. MariaDB 전환 및 공용 DB 설정 (2026-04-02 추가)
 
-| 패키지 | 버전 | 비고 |
-|--------|------|------|
-| paddlepaddle-gpu | 3.1.1 | CUDA 12.6 빌드 (12.7과 호환) |
-| paddleocr | 3.1.1 | PaddlePaddle 3.x 기반 |
-| paddlex | 3.1.4 | PP-DocLayout 모델 제공 |
-| reportlab | 4.4.10 | PDF 텍스트 레이어 생성 |
-| pdf2image | 1.17.0 | PDF → 이미지 변환 |
-| PyPDF2 | 3.0.1 | PDF 처리 |
-| aiofiles | 25.1.0 | 비동기 파일 I/O |
-| langchain | 0.3.25 | paddlex 호환 버전으로 다운그레이드 |
-| langchain-community | 0.4 | docstore.Document 호환성 |
+#### 9-1. 공유 서버(192.168.0.231) 연동 및 아키텍처 확장
+- **변경 내용**: 로컬 전용 SQLite(`ocr_gen.db`)에서 팀 공용 서버의 MariaDB(`192.168.0.231`)로 데이터베이스 엔진 이전.
+- **이유**: 팀원 간 작업 내역 및 세션 데이터를 실시간으로 공유하고 협업하기 위함.
+- **설정**: `config.yaml` 내 `database.url` 항목을 통해 접속 정보 관리.
+
+#### 9-2. `backend/database.py` 동적 엔진 및 다이얼렉트 최적화
+- **변경 내용**: `Config.DATABASE_URL` 존재 여부에 따라 SQLite(로컬)와 MariaDB/MySQL(원격)을 자동으로 판별하여 엔진 생성.
+- **수정 사항**:
+    - SQLite 전용 옵션(`check_same_thread: False`)을 SQLite 접속 시에만 적용되도록 조건부 로직 추가.
+    - 기존 `DB_PATH` 상수를 제거하고 `Config.DATA_DIR` 기반 동적 경로로 변경.
+    - `migrate_existing_jobs` 함수 내 하드코딩된 `default` 유저 아이디를 `Config.DEFAULT_USER_ID`로 동기화하여 초기 데이터 정합성 확보.
+
+#### 9-3. `pymysql` 드라이버 도입 및 의존성 업데이트
+- **변경 내용**: MariaDB 서버와의 통신을 위해 `pymysql` 라이브러리를 설치하고 `backend/requirements.txt`에 명시.
+- **팀원 조치 사항**: Pull 받은 후 `pip install pymysql` 또는 `pip install -r backend/requirements.txt` 실행 필요.
 
 ---
 
-## 서버 상태
+### 10. `backend/config.py` 구성 관리 고도화
+
+#### 10-1. 가독성 및 필드 확장
+- **변경 내용**: `DATABASE_URL` 필드를 `Config` 클래스에 추가하고, `load_from_yaml` 메서드에서 `config.yaml`의 `database` 섹션을 파싱하여 덮어쓰도록 구현.
+- **이유**: 소스 코드 수정 없이 환경 설정 파일만으로 DB 서버 주소 및 계정 정보를 변경할 수 있도록 유연성 확보.
+
+---
+
+## 설치된 패키지 (업데이트)
+
+| 패키지 | 버전 | 비고 |
+|--------|------|------|
+| pymysql | 1.1.2 | MariaDB/MySQL 클라이언트 드라이버 |
+
+---
+
+## 서버 상태 (업데이트)
 
 | 구분 | URL |
 |------|-----|
-| 백엔드 API | http://192.168.0.69:6015 |
-| 프론트엔드 UI | http://192.168.0.69:6017 |
-| API 문서 | http://192.168.0.69:6015/docs |
-
-```bash
-# 시작
-bash start.sh
-
-# 종료
-bash stop.sh
-
-# 상태 확인
-bash status.sh
-```
+| 공용 데이터베이스 | mysql+pymysql://ocr_user:1234@192.168.0.231:3306/ocr_db |

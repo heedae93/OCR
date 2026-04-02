@@ -12,16 +12,15 @@ from config import Config
 
 logger = logging.getLogger(__name__)
 
-# Database path
-DB_PATH = Config.DATA_DIR / "ocr_gen.db"
-DATABASE_URL = f"sqlite:///{DB_PATH}"
+# Database URL from Config (with SQLite fallback)
+DATABASE_URL = Config.DATABASE_URL or f"sqlite:///{Config.DATA_DIR / 'ocr_gen.db'}"
 
-# Create engine
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False},  # SQLite specific
-    echo=False  # Set to True for SQL query logging
-)
+# Create engine with dialect-specific arguments
+engine_args = {"echo": False}
+if DATABASE_URL.startswith("sqlite"):
+    engine_args["connect_args"] = {"check_same_thread": False}
+
+engine = create_engine(DATABASE_URL, **engine_args)
 
 # Session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -174,7 +173,7 @@ def init_db():
     try:
         # Create all tables
         Base.metadata.create_all(bind=engine)
-        logger.info(f"Database initialized at {DB_PATH}")
+        logger.info(f"Database initialized at {DATABASE_URL}")
 
         # Create default user if not exists
         db = SessionLocal()
@@ -235,7 +234,7 @@ def migrate_existing_jobs():
     db = SessionLocal()
     try:
         # Get default user
-        default_user = db.query(User).filter_by(user_id="default").first()
+        default_user = db.query(User).filter_by(user_id=Config.DEFAULT_USER_ID).first()
 
         # Scan processed directory
         processed_dir = Config.PROCESSED_DIR
