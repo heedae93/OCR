@@ -11,25 +11,32 @@ interface NavItem {
   badge?: string | number
 }
 
-const navItems: NavItem[] = [
+const baseNavItems: NavItem[] = [
   { href: '/', icon: 'dashboard', label: '대시보드' },
   { href: '/ocr-work', icon: 'document_scanner', label: 'OCR 작업하기' },
   { href: '/jobs', icon: 'history', label: '작업 내역' },
   // { href: '/drive', icon: 'folder', label: '내 드라이브' },
-  { href: '/settings', icon: 'settings', label: '설정' },
   { href: '/help', icon: 'help', label: '도움말' },
+]
+
+const adminNavItems: NavItem[] = [
+  { href: '/settings', icon: 'settings', label: '설정' },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [user, setUser] = useState<{ name: string; username: string } | null>(null)
+  const [user, setUser] = useState<{ name: string; username: string; type?: string } | null>(null)
 
   useEffect(() => {
     const stored = localStorage.getItem('user')
     if (stored) setUser(JSON.parse(stored))
   }, [])
+
+  const navItems = user?.type === 'A'
+    ? [...baseNavItems, ...adminNavItems]
+    : baseNavItems
   const menuRef = useRef<HTMLDivElement>(null)
 
   const isActive = (path: string) => pathname === path

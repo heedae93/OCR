@@ -51,6 +51,7 @@ def register(body: RegisterRequest, db: DBSession = Depends(get_db)):
         name=body.name,
         email=body.email,
         password_hash=hash_password(body.password),
+        type='U',
     )
     db.add(user)
     db.commit()
@@ -76,4 +77,4 @@ def login(body: LoginRequest, db: DBSession = Depends(get_db)):
     db.commit()
 
     logger.info(f"User logged in: {user.username} ({user.user_id})")
-    return {"user_id": user.user_id, "username": user.username, "name": user.name}
+    return {"user_id": user.user_id, "username": user.username, "name": user.name, "type": user.type}

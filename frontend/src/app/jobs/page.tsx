@@ -45,8 +45,9 @@ export default function JobsPage() {
   const loadJobs = async () => {
     try {
       setLoading(true)
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
       const params = new URLSearchParams({
-        user_id: 'user001',
+        user_id: user.user_id ,
         limit: '50'
       })
 
@@ -70,7 +71,8 @@ export default function JobsPage() {
 
   const loadStatistics = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/jobs/statistics/summary?user_id=user001`)
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      const response = await fetch(`${API_BASE_URL}/api/jobs/statistics/summary?user_id=${user.user_id }`)
       const data = await response.json()
       setStatistics(data)
     } catch (error) {
@@ -249,7 +251,7 @@ export default function JobsPage() {
                 <thead className="bg-background-light dark:bg-background-dark border-b border-border-light dark:border-border-dark">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-text-secondary-light dark:text-text-secondary-dark uppercase tracking-wider">
-                      파일명
+                      세선명
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-text-secondary-light dark:text-text-secondary-dark uppercase tracking-wider">
                       상태
@@ -273,7 +275,12 @@ export default function JobsPage() {
                     <tr key={job.job_id} className="hover:bg-background-light dark:hover:bg-background-dark transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-text-primary-light dark:text-text-primary-dark">
+                           <button
+                              onClick={() => router.push(`/editor/${job.job_id}`)}
+                              className="text-primary hover:text-primary/80"
+                            >
                           {job.filename}
+                          </button>
                         </div>
                         {job.is_double_column && (
                           <div className="text-xs text-text-secondary-light dark:text-text-secondary-dark">
@@ -304,13 +311,7 @@ export default function JobsPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                         {job.status === 'completed' && job.pdf_url && (
-                          <>
-                            <button
-                              onClick={() => router.push(`/editor/${job.job_id}`)}
-                              className="text-primary hover:text-primary/80"
-                            >
-                              편집
-                            </button>
+                          <>                           
                             <a
                               href={`${API_BASE_URL}${job.pdf_url}`}
                               download
