@@ -14,6 +14,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: '/', icon: 'dashboard', label: '대시보드' },
   { href: '/ocr-work', icon: 'document_scanner', label: 'OCR 작업하기' },
+  { href: '/ocr-filezilla', icon: 'folder_shared', label: 'OCR 작업하기 (파일질라)' },
   { href: '/jobs', icon: 'history', label: '작업 내역' },
   // { href: '/drive', icon: 'folder', label: '내 드라이브' },
   { href: '/settings', icon: 'settings', label: '설정' },
