@@ -16,9 +16,11 @@ logger = logging.getLogger(__name__)
 DATABASE_URL = Config.DATABASE_URL or f"sqlite:///{Config.DATA_DIR / 'ocr_gen.db'}"
 
 # Create engine with dialect-specific arguments
-engine_args = {"echo": False}
+engine_args = {"echo": False, "pool_pre_ping": True}
 if DATABASE_URL.startswith("sqlite"):
     engine_args["connect_args"] = {"check_same_thread": False}
+else:
+    engine_args["pool_recycle"] = 3600
 
 engine = create_engine(DATABASE_URL, **engine_args)
 
@@ -40,6 +42,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     last_login = Column(DateTime, nullable=True)
+    type = Column(String(1), default="U")  # A: Admin, U: User
     total_jobs = Column(Integer, default=0)
     storage_used_bytes = Column(Integer, default=0)
 

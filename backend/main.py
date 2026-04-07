@@ -37,9 +37,11 @@ if not Config.GPU_AUTO_DETECT_LIBS:
         parts = [p for p in [cudnn_path, cublas_path, current_ld_path] if p]
         os.environ['LD_LIBRARY_PATH'] = ':'.join(parts)
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError, DatabaseError
 
 # Import CTC patch module (paddlex 초기화는 patch_ctc_decoder() 호출 시 발생)
 from core.ctc_patch import patch_ctc_decoder
@@ -74,6 +76,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# DB 연결 오류를 HTTP 503으로 변환 (CORS 헤더가 포함된 응답 반환)
+@app.exception_handler(OperationalError)
+async def db_operational_error_handler(request: Request, exc: OperationalError):
+    logger.error(f"DB connection error: {exc}")
+    return JSONResponse(status_code=503, content={"detail": "데이터베이스 연결 오류입니다. 잠시 후 다시 시도해주세요."})
+
+@app.exception_handler(DatabaseError)
+async def db_error_handler(request: Request, exc: DatabaseError):
+    logger.error(f"DB error: {exc}")
+    return JSONResponse(status_code=503, content={"detail": "데이터베이스 오류가 발생했습니다."})
 
 # Include routers
 app.include_router(ocr.router, prefix="/api", tags=["OCR"])
