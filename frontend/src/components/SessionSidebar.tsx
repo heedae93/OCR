@@ -213,7 +213,8 @@ export default function SessionSidebar({ onDocumentSelect, currentJobId }: Sessi
       } else if (sessions.length === 0) {
         setLoading(true)
       }
-      const response = await fetch(`${API_BASE}/sessions`)
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      const response = await fetch(`${API_BASE}/sessions?user_id=${user.user_id || ''}`)
       if (response.ok) {
         const data = await response.json()
         setSessions(data)

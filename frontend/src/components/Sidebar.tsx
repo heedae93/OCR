@@ -16,12 +16,16 @@ const baseNavItems: NavItem[] = [
   { href: '/ocr-work', icon: 'document_scanner', label: 'OCR 작업하기' },
   { href: '/jobs', icon: 'history', label: '작업내역' },
   { href: '/history', icon: 'manage_history', label: '이력관리' },
-  { href: '/help', icon: 'help', label: '도움말' },
+  { href: '/statistics', icon: 'bar_chart', label: '통계' },
 ]
 
 const adminNavItems: NavItem[] = [
-  { href: '/settings', icon: 'settings', label: '설정' },
   { href: '/admin/users', icon: 'manage_accounts', label: '사용자관리' },
+]
+
+const bottomNavItems: NavItem[] = [
+  { href: '/help', icon: 'help', label: '도움말' },
+  { href: '/settings', icon: 'settings', label: '설정' },
 ]
 
 export default function Sidebar() {
@@ -38,6 +42,9 @@ export default function Sidebar() {
   const navItems = user?.type === 'A'
     ? [...baseNavItems, ...adminNavItems]
     : baseNavItems
+  const bottomItems = user?.type === 'A'
+    ? bottomNavItems
+    : bottomNavItems.filter(i => i.href !== '/settings')
   const menuRef = useRef<HTMLDivElement>(null)
 
   const isActive = (path: string) => pathname === path
@@ -87,7 +94,6 @@ export default function Sidebar() {
                     : 'hover:bg-black/5 dark:hover:bg-white/5 text-text-secondary-light dark:text-text-secondary-dark hover:text-text-primary-light dark:hover:text-text-primary-dark'
                 }`}
               >
-                {/* Active indicator */}
                 {active && (
                   <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
                 )}
@@ -106,6 +112,39 @@ export default function Sidebar() {
                     {item.badge}
                   </span>
                 )}
+              </Link>
+            )
+          })}
+        </nav>
+
+        {/* Bottom Navigation (도움말, 설정) */}
+        <div className="h-px bg-gradient-to-r from-transparent via-border-light dark:via-border-dark to-transparent mx-2" />
+        <nav className="flex flex-col gap-1">
+          {bottomItems.map((item) => {
+            const active = isActive(item.href)
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative overflow-hidden ${
+                  active
+                    ? 'bg-primary/10 dark:bg-primary/15 text-primary'
+                    : 'hover:bg-black/5 dark:hover:bg-white/5 text-text-secondary-light dark:text-text-secondary-dark hover:text-text-primary-light dark:hover:text-text-primary-dark'
+                }`}
+              >
+                {active && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
+                )}
+                <span className={`material-symbols-outlined text-xl transition-all duration-200 ${
+                  active ? 'text-primary' : 'group-hover:scale-110'
+                }`}>
+                  {item.icon}
+                </span>
+                <span className={`text-sm transition-all duration-200 ${
+                  active ? 'font-semibold' : 'font-medium'
+                }`}>
+                  {item.label}
+                </span>
               </Link>
             )
           })}

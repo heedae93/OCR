@@ -163,12 +163,11 @@ async def create_session(
     try:
         session_id = generate_unique_id()
 
-        # Find the user where 'username' or 'user_id' is 'futurenuri'
-        futurenuri_user = db.query(User).filter(
-            (User.username == "futurenuri") | (User.user_id == "futurenuri")
-        ).first()
-
-        actual_user_id = futurenuri_user.user_id if futurenuri_user else user_id
+        # 전달된 user_id로 사용자 존재 여부 확인, 없으면 기본값 사용
+        user = db.query(User).filter_by(user_id=user_id).first()
+        if not user:
+            user = db.query(User).filter_by(user_id=Config.DEFAULT_USER_ID).first()
+        actual_user_id = user.user_id if user else user_id
 
         new_session = Session(
             session_id=session_id,
@@ -202,7 +201,7 @@ async def create_session(
 
 @router.get("/sessions", response_model=List[SessionResponse])
 async def list_sessions(
-    user_id: str = Config.DEFAULT_USER_ID,
+    user_id: str = "",
     db: DBSession = Depends(get_db)
 ):
     """List all sessions for a user"""
