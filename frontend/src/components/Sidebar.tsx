@@ -14,13 +14,14 @@ interface NavItem {
 const baseNavItems: NavItem[] = [
   { href: '/', icon: 'dashboard', label: '대시보드' },
   { href: '/ocr-work', icon: 'document_scanner', label: 'OCR 작업하기' },
-  { href: '/jobs', icon: 'history', label: '작업 내역' },
-  // { href: '/drive', icon: 'folder', label: '내 드라이브' },
+  { href: '/jobs', icon: 'history', label: '작업내역' },
+  { href: '/history', icon: 'manage_history', label: '이력관리' },
   { href: '/help', icon: 'help', label: '도움말' },
 ]
 
 const adminNavItems: NavItem[] = [
   { href: '/settings', icon: 'settings', label: '설정' },
+  { href: '/admin/users', icon: 'manage_accounts', label: '사용자관리' },
 ]
 
 export default function Sidebar() {
