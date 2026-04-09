@@ -190,6 +190,13 @@ export default function Sidebar() {
           {userMenuOpen && (
             <div className="mt-1 rounded-xl border border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark shadow-lg overflow-hidden">
               <button
+                onClick={() => { setUserMenuOpen(false); router.push('/mypage') }}
+                className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-text-primary-light dark:text-text-primary-dark hover:bg-black/5 dark:hover:bg-white/5 transition-colors duration-150"
+              >
+                <span className="material-symbols-outlined text-lg">manage_accounts</span>
+                마이페이지
+              </button>
+              <button
                 onClick={() => router.push('/logout')}
                 className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors duration-150"
               >
