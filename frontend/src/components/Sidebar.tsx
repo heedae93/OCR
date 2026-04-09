@@ -13,10 +13,12 @@ interface NavItem {
 
 const baseNavItems: NavItem[] = [
   { href: '/', icon: 'dashboard', label: '대시보드' },
-  { href: '/ocr-work', icon: 'document_scanner', label: 'OCR 작업하기' },
+  { href: '/metadata', icon: 'dataset', label: '메타데이터 관리' },
+  { href: '/ocr-work', icon: 'document_scanner', label: 'OCR 작업하기' },  
   { href: '/jobs', icon: 'history', label: '작업내역' },
   { href: '/history', icon: 'manage_history', label: '이력관리' },
   { href: '/statistics', icon: 'bar_chart', label: '통계' },
+  
 ]
 
 const adminNavItems: NavItem[] = [
@@ -32,12 +34,28 @@ export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [user, setUser] = useState<{ name: string; username: string; type?: string } | null>(null)
+  const [user, setUser] = useState<{ name: string; username: string; type?: string; user_id?: string } | null>(null)
+  const [todayCount, setTodayCount] = useState(0)
 
   useEffect(() => {
     const stored = localStorage.getItem('user')
-    if (stored) setUser(JSON.parse(stored))
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      setUser(parsed)
+      fetchTodayCount(parsed.user_id || '')
+    }
   }, [])
+
+  const fetchTodayCount = async (userId: string) => {
+    try {
+      const { API_BASE_URL } = await import('@/lib/api')
+      const res = await fetch(`${API_BASE_URL}/api/jobs/statistics/summary?user_id=${userId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setTodayCount(data.today_completed ?? data.total_jobs ?? 0)
+      }
+    } catch {}
+  }
 
   const navItems = user?.type === 'A'
     ? [...baseNavItems, ...adminNavItems]
@@ -157,7 +175,7 @@ export default function Sidebar() {
             <span className="text-xs font-semibold text-primary">오늘의 처리량</span>
           </div>
           <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-bold text-text-primary-light dark:text-text-primary-dark">0</span>
+            <span className="text-2xl font-bold text-text-primary-light dark:text-text-primary-dark">{todayCount}</span>
             <span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">파일</span>
           </div>
         </div>
