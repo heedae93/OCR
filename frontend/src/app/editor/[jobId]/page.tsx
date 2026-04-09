@@ -66,6 +66,8 @@ export default function EditorPage() {
   const [textElements, setTextElements] = useState<TextElement[]>([])
   const [pageWidth, setPageWidth] = useState(0)
   const [pageHeight, setPageHeight] = useState(0)
+  const [previewCollapsed, setPreviewCollapsed] = useState(false)
+  const [showSmartTools, setShowSmartTools] = useState(false)
 
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved')
@@ -686,15 +688,37 @@ export default function EditorPage() {
           />
 
           {/* Page Thumbnails Sidebar */}
-          <aside className="flex h-full w-64 flex-shrink-0 flex-col justify-between border-r border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark p-4 overflow-y-auto">
+          <aside className={`flex h-full flex-shrink-0 flex-col justify-between border-r border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark overflow-y-auto transition-all duration-300 ${previewCollapsed ? 'w-10 p-0' : 'w-64 p-4'}`}>
+            {previewCollapsed ? (
+              <div className="flex flex-col items-center pt-3 gap-2">
+                <button
+                  onClick={() => setPreviewCollapsed(false)}
+                  className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary-light dark:text-text-secondary-dark"
+                  title="미리보기 펼치기"
+                >
+                  <span className="material-symbols-outlined text-xl">chevron_right</span>
+                </button>
+                <span className="text-xs text-text-secondary-light dark:text-text-secondary-dark [writing-mode:vertical-rl] mt-2 select-none">미리보기</span>
+              </div>
+            ) : (
+            <>
             <div className="flex flex-col gap-4">
-              <div>
-                <h2 className="text-base font-medium text-text-primary-light dark:text-text-primary-dark">
-                  페이지 미리보기
-                </h2>
-                <p className="text-sm text-text-secondary-light dark:text-text-secondary-dark">
-                  드래그하여 페이지 순서 변경
-                </p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-medium text-text-primary-light dark:text-text-primary-dark">
+                    페이지 미리보기
+                  </h2>
+                  <p className="text-sm text-text-secondary-light dark:text-text-secondary-dark">
+                    드래그하여 페이지 순서 변경
+                  </p>
+                </div>
+                <button
+                  onClick={() => setPreviewCollapsed(true)}
+                  className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary-light dark:text-text-secondary-dark flex-shrink-0"
+                  title="미리보기 접기"
+                >
+                  <span className="material-symbols-outlined text-xl">chevron_left</span>
+                </button>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {(() => {
@@ -764,6 +788,8 @@ export default function EditorPage() {
                 <span>페이지 맵</span>
               </button>
             </div>
+            </>
+            )}
           </aside>
 
           {/* Center - PDF Viewer */}
@@ -831,6 +857,16 @@ export default function EditorPage() {
               </div>
               <div className="flex items-center gap-2 min-w-[300px] justify-end">
                 <button
+                  onClick={() => setShowSmartTools(!showSmartTools)}
+                  className={`flex items-center gap-2 p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 whitespace-nowrap ${
+                    showSmartTools ? 'bg-primary/10 text-primary' : 'text-text-secondary-light dark:text-text-secondary-dark'
+                  }`}
+                  title="Smart Tools"
+                >
+                  <span className="material-symbols-outlined">build</span>
+                  <span className="text-sm hidden lg:inline">Smart Tools</span>
+                </button>
+                <button
                   onClick={() => setShowOCRComparison(!showOCRComparison)}
                   className={`flex items-center gap-2 p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 whitespace-nowrap ${
                     showOCRComparison ? 'bg-primary/10 text-primary' : 'text-text-secondary-light dark:text-text-secondary-dark'
@@ -893,17 +929,19 @@ export default function EditorPage() {
             </div>
           </section>
 
-          {/* Right Sidebar - Tools */}
-          <aside className="hidden h-full w-72 flex-shrink-0 flex-col border-l border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark p-4 lg:flex">
-            <div className="flex items-center border-b border-border-light dark:border-border-dark">
-              <button className="flex-1 py-3 text-sm font-semibold border-b-2 border-primary text-primary">
-                Smart Tools
-              </button>
-              <button className="flex-1 py-3 text-sm font-medium text-text-secondary-light dark:text-text-secondary-dark hover:border-b-2 hover:border-gray-300 dark:hover:border-gray-500 hover:text-text-primary-light dark:hover:text-text-primary-dark">
-                변경 내역
+          {/* Smart Tools Floating Panel */}
+          {showSmartTools && (
+          <aside className="h-full w-72 flex-shrink-0 flex-col border-l border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark p-4 flex">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-sm font-semibold text-text-primary-light dark:text-text-primary-dark">Smart Tools</span>
+              <button
+                onClick={() => setShowSmartTools(false)}
+                className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary-light dark:text-text-secondary-dark"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
               </button>
             </div>
-            <div className="flex flex-1 flex-col gap-4 pt-6 overflow-y-auto">
+            <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
               {/* OCR Insertion Button */}
               {!hasOCRResults && !isProcessingOCR && (
                 <button
@@ -1092,6 +1130,7 @@ export default function EditorPage() {
               )}
             </div>
           </aside>
+          )}
           </div>
         </main>
       </div>
