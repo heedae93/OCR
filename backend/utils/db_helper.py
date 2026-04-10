@@ -87,8 +87,9 @@ def update_job_status(
 
         if status == "completed":
             job.completed_at = datetime.now()
-            if job.started_at:
-                job.processing_time_seconds = (job.completed_at - job.started_at).total_seconds()
+            start = job.started_at or job.created_at
+            if start:
+                job.processing_time_seconds = (job.completed_at - start).total_seconds()
 
         db.commit()
         db.close()

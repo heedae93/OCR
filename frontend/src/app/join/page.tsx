@@ -16,6 +16,7 @@ export default function JoinPage() {
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -60,7 +61,8 @@ export default function JoinPage() {
         const data = await res.json()
         throw new Error(data.detail || '회원가입에 실패했습니다.')
       }
-      router.push('/')
+      setSuccess(true)
+      setTimeout(() => router.push('/login'), 2000)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '회원가입에 실패했습니다. 다시 시도해주세요.'
       setErrors({ submit: msg })
@@ -170,6 +172,11 @@ export default function JoinPage() {
               />
               {errors.passwordConfirm && <p className="text-xs text-red-500">{errors.passwordConfirm}</p>}
             </div>
+
+            {/* 성공 메시지 */}
+            {success && (
+              <p className="text-sm text-green-600 text-center font-medium">가입되었습니다. 로그인 페이지로 이동합니다.</p>
+            )}
 
             {/* 서버 에러 */}
             {errors.submit && (

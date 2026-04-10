@@ -59,36 +59,22 @@ class ReadingOrderSorter:
         # Check if layout information is available
         has_layout_info = any('layout_type' in block for block in ocr_blocks)
 
-        if has_layout_info and use_layout_priority:
-            # Use layout-based sorting (priority + column + position)
-            sorted_blocks = self._sort_by_layout_priority(ocr_blocks, page_width, page_height)
-            column_info = self._detect_columns(ocr_blocks, page_width)
-            column_info['sorting_method'] = 'layout_priority'
+        # Detect column layout first
+        column_info = self._detect_columns(ocr_blocks, page_width)
+
+        if column_info.get('is_double_column'):
+            # Double column: left column top→bottom, then right column top→bottom
+            boundary = column_info['boundary']
+            left_blocks = [b for b in ocr_blocks if (b['bbox'][0] + b['bbox'][2]) / 2.0 < boundary]
+            right_blocks = [b for b in ocr_blocks if (b['bbox'][0] + b['bbox'][2]) / 2.0 >= boundary]
+            left_blocks.sort(key=lambda b: (b['bbox'][1], b['bbox'][0]))
+            right_blocks.sort(key=lambda b: (b['bbox'][1], b['bbox'][0]))
+            sorted_blocks = left_blocks + right_blocks
+            column_info['sorting_method'] = 'double_column_y'
         else:
-            # Use heuristic-based sorting (title detection + column)
-            # Step 0: Detect and separate titles from body text
-            titles, body_blocks = self._detect_titles(ocr_blocks, page_width, page_height)
-
-            # Step 1: Detect column layout (for body text only)
-            column_info = self._detect_columns(body_blocks if body_blocks else ocr_blocks, page_width)
-
-            # Step 2: Group body blocks into rows
-            rows = self._cluster_into_rows(body_blocks if body_blocks else ocr_blocks)
-
-            # Step 3: Sort body blocks based on layout
-            if column_info['is_double_column']:
-                sorted_body = self._sort_double_column(rows, column_info['boundary'])
-            else:
-                sorted_body = self._sort_single_column(rows)
-
-            # Step 4: Combine titles + body (titles first, in Y-order)
-            if titles:
-                titles.sort(key=lambda b: b['bbox'][1])  # Sort titles by Y
-                sorted_blocks = titles + sorted_body
-            else:
-                sorted_blocks = sorted_body
-
-            column_info['sorting_method'] = 'heuristic'
+            # Single column: strict top→bottom, left→right
+            sorted_blocks = sorted(ocr_blocks, key=lambda b: (b['bbox'][1], b['bbox'][0]))
+            column_info['sorting_method'] = 'single_column_y'
 
         logger.info(
             f"Reading order sorted: {len(sorted_blocks)} blocks, "

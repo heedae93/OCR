@@ -145,7 +145,8 @@ export default function UploadQueueModal({ visible, onClose, onComplete, onProce
 
     let sessionId: string
     try {
-      const res = await fetch(`${API_BASE}/sessions`, {
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+      const res = await fetch(`${API_BASE}/sessions?user_id=${currentUser.user_id || ''}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_name: sessionName, description: '' })

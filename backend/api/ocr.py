@@ -555,6 +555,8 @@ def process_job_task(job_id: str):
     try:
         # Update status
         job_manager.update_job(job_id, status=JobStatus.PROCESSING, progress_percent=0.0)
+        from utils.db_helper import update_job_status as _db_update_status
+        _db_update_status(job_id, "processing", progress=0.0)
 
         job = job_manager.get_job(job_id)
         if not job:

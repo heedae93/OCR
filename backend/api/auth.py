@@ -7,6 +7,7 @@ import secrets
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
+from typing import Optional
 from sqlalchemy.orm import Session as DBSession
 
 from database import get_db, User
@@ -51,6 +52,7 @@ def register(body: RegisterRequest, db: DBSession = Depends(get_db)):
         name=body.name,
         email=body.email,
         password_hash=hash_password(body.password),
+        type='U',
     )
     db.add(user)
     db.commit()
@@ -58,6 +60,53 @@ def register(body: RegisterRequest, db: DBSession = Depends(get_db)):
 
     logger.info(f"New user registered: {user.username} ({user.user_id})")
     return {"user_id": user.user_id, "username": user.username, "name": user.name}
+
+
+class FindPasswordRequest(BaseModel):
+    username: str
+    email: str
+    new_password: str
+
+
+@router.post("/auth/find-password")
+def find_password(body: FindPasswordRequest, db: DBSession = Depends(get_db)):
+    user = db.query(User).filter_by(username=body.username, email=body.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="아이디 또는 이메일이 일치하지 않습니다.")
+    user.password_hash = hash_password(body.new_password)
+    db.commit()
+    return {"detail": "비밀번호가 변경되었습니다."}
+
+
+class ProfileUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    current_password: Optional[str] = None
+    new_password: Optional[str] = None
+
+
+@router.put("/auth/profile/{user_id}")
+def update_profile(user_id: str, body: ProfileUpdateRequest, db: DBSession = Depends(get_db)):
+    user = db.query(User).filter_by(user_id=user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+    if body.name is not None:
+        user.name = body.name
+    if body.email is not None:
+        existing = db.query(User).filter_by(email=body.email).first()
+        if existing and existing.user_id != user_id:
+            raise HTTPException(status_code=409, detail="이미 사용 중인 이메일입니다.")
+        user.email = body.email
+    if body.new_password:
+        if not body.current_password:
+            raise HTTPException(status_code=400, detail="현재 비밀번호를 입력해주세요.")
+        if not verify_password(body.current_password, user.password_hash):
+            raise HTTPException(status_code=401, detail="현재 비밀번호가 올바르지 않습니다.")
+        user.password_hash = hash_password(body.new_password)
+
+    db.commit()
+    return {"user_id": user.user_id, "username": user.username, "name": user.name, "email": user.email, "type": user.type}
 
 
 class LoginRequest(BaseModel):
@@ -76,4 +125,4 @@ def login(body: LoginRequest, db: DBSession = Depends(get_db)):
     db.commit()
 
     logger.info(f"User logged in: {user.username} ({user.user_id})")
-    return {"user_id": user.user_id, "username": user.username, "name": user.name}
+    return {"user_id": user.user_id, "username": user.username, "name": user.name, "type": user.type}
