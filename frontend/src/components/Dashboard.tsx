@@ -195,7 +195,7 @@ export default function Dashboard() {
             </p>
           </div>
           <button
-            onClick={() => setShowNewSessionModal(true)}
+            onClick={() => router.push('/ocr-work')}
             className="flex items-center gap-2 px-6 py-3 bg-white text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-colors whitespace-nowrap"
           >
             <Zap className="w-5 h-5" />
