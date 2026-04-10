@@ -48,6 +48,17 @@ export default function JobsPage() {
     loadStatistics()
   }, [statusFilter])
 
+  // 처리 중인 작업이 있으면 3초마다 자동 새로고침
+  useEffect(() => {
+    const hasProcessing = groups.some(g => g.jobs.some(j => j.status === 'processing' || j.status === 'queued'))
+    if (!hasProcessing) return
+    const timer = setInterval(() => {
+      loadData()
+      loadStatistics()
+    }, 3000)
+    return () => clearInterval(timer)
+  }, [groups])
+
   const loadData = async () => {
     try {
       setLoading(true)

@@ -315,7 +315,7 @@ def _merge_ocr_lines(blocks: List[Dict], y_threshold: float = 6.0, x_gap: float 
 
 
 @router.post("/upload")
-def upload_file(file: UploadFile = File(...)):
+def upload_file(file: UploadFile = File(...), user_id: str = Config.DEFAULT_USER_ID):
     """Upload a file for OCR processing"""
     try:
         # Validate file type
@@ -343,7 +343,7 @@ def upload_file(file: UploadFile = File(...)):
         job = job_manager.create_job(
             job_id=job_id,
             filename=file.filename,
-            user_id=Config.DEFAULT_USER_ID
+            user_id=user_id
         )
 
         # Save to database
@@ -354,7 +354,7 @@ def upload_file(file: UploadFile = File(...)):
             filename=file.filename,
             file_path=str(file_path),
             file_size=file_path.stat().st_size,
-            user_id=Config.DEFAULT_USER_ID
+            user_id=user_id
         )
         if db_saved:
             logger.info(f"Job {job_id} successfully saved to database")

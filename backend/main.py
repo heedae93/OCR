@@ -48,6 +48,7 @@ from core.ctc_patch import patch_ctc_decoder
 
 # PaddleOCR/paddlex 먼저 임포트 (paddlex 초기화 1회 수행)
 from api import ocr, storage, drive, jobs, sessions, settings, export, auth, users
+from api import metadata_settings
 
 # CTC patch는 paddleocr 임포트 이후에 적용 (paddlex 재초기화 충돌 방지)
 patch_ctc_decoder()
@@ -98,6 +99,7 @@ app.include_router(settings.router, tags=["Settings"])
 app.include_router(export.router, tags=["Export"])
 app.include_router(auth.router, prefix="/api", tags=["Auth"])
 app.include_router(users.router, prefix="/api", tags=["Users"])
+app.include_router(metadata_settings.router, prefix="/api", tags=["MetadataSettings"])
 
 # Mount static files
 try:
@@ -132,6 +134,21 @@ async def startup_event():
         logger.info("Database initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
+
+    # Reset orphaned 'processing' jobs left from previous crash/restart
+    try:
+        from database import SessionLocal, Job as DBJob
+        db = SessionLocal()
+        orphaned = db.query(DBJob).filter(DBJob.status.in_(["processing", "queued"])).all()
+        for job in orphaned:
+            job.status = "failed"
+            job.error_message = "서버 재시작으로 인해 중단됨"
+        db.commit()
+        db.close()
+        if orphaned:
+            logger.warning(f"Reset {len(orphaned)} orphaned processing/queued jobs to failed")
+    except Exception as e:
+        logger.error(f"Failed to reset orphaned jobs: {e}")
 
     # Pre-load OCR models for all GPUs at startup
     logger.info("=" * 60)

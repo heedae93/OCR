@@ -2,10 +2,11 @@
 Database helper functions for job tracking
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any
-from database import SessionLocal, Job, OCRPage, User, Session, SessionDocument
+import json
+from database import SessionLocal, Job, OCRPage, DocumentChunk, User, Session, SessionDocument
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,10 @@ def update_job_status(
             job.completed_at = datetime.now()
             start = job.started_at or job.created_at
             if start:
-                job.processing_time_seconds = (job.completed_at - start).total_seconds()
+                # strip timezone info if present to avoid offset-naive/aware mismatch
+                start_naive = start.replace(tzinfo=None) if start.tzinfo else start
+                completed_naive = job.completed_at.replace(tzinfo=None)
+                job.processing_time_seconds = (completed_naive - start_naive).total_seconds()
 
         db.commit()
         db.close()
@@ -163,6 +167,57 @@ def update_job_ocr_results(
 
         db.commit()
         logger.info(f"Updated OCR results for job {job_id}")
+
+        # 메타데이터 추출 및 저장
+        try:
+            from utils.metadata_extractor import extract_all_metadata
+            from api.metadata_settings import get_user_settings
+
+            # 유저 설정 로드
+            settings = get_user_settings(job.user_id, db)
+            meta = extract_all_metadata(
+                ocr_data,
+                chunk_size=settings.chunk_size,
+                chunk_overlap=settings.chunk_overlap,
+                keywords_top_n=settings.keywords_top_n,
+            )
+
+            if settings.extract_full_text:
+                job.full_text = meta["full_text"]
+            if settings.extract_language:
+                job.detected_language = meta["detected_language"]
+            if settings.extract_doc_type:
+                job.doc_type = meta["doc_type"]
+            if settings.extract_keywords:
+                job.keywords = json.dumps(meta["keywords"], ensure_ascii=False)
+            if settings.extract_dates:
+                job.detected_dates = json.dumps(meta["detected_dates"], ensure_ascii=False)
+            if settings.extract_char_count:
+                job.char_count = meta["char_count"]
+            if settings.extract_word_count:
+                job.word_count = meta["word_count"]
+
+            # 청크 저장
+            if settings.extract_chunks:
+                db.query(DocumentChunk).filter_by(job_id=job_id).delete()
+                for chunk in meta["chunks"]:
+                    db.add(DocumentChunk(
+                        job_id=job_id,
+                        chunk_index=chunk["chunk_index"],
+                        text=chunk["text"],
+                        page_number=chunk["page_number"],
+                        char_start=chunk["char_start"],
+                        char_end=chunk["char_end"],
+                    ))
+
+            db.commit()
+            logger.info(
+                f"Metadata saved for job {job_id}: "
+                f"lang={meta['detected_language']}, doc_type={meta['doc_type']}, "
+                f"keywords={len(meta['keywords'])}, chunks={len(meta['chunks'])}"
+            )
+        except Exception as meta_err:
+            logger.error(f"Metadata extraction failed for job {job_id}: {meta_err}")
 
         db.close()
         return True

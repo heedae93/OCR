@@ -94,10 +94,20 @@ class Job(Base):
     tags = Column(Text, nullable=True)  # JSON string: ["학술논문", "영어"]
     notes = Column(Text, nullable=True)
 
+    # Extracted metadata (from OCR text)
+    full_text = Column(Text, nullable=True)             # 전체 추출 텍스트
+    detected_language = Column(String(10), nullable=True)  # ko / en / mixed
+    doc_type = Column(String(50), nullable=True)         # 공문서 / 계약서 / 보고서 등
+    keywords = Column(Text, nullable=True)               # JSON: ["키워드1", "키워드2"]
+    detected_dates = Column(Text, nullable=True)         # JSON: ["2026년 4월 10일"]
+    char_count = Column(Integer, nullable=True)
+    word_count = Column(Integer, nullable=True)
+
     # Relationships
     user = relationship("User", back_populates="jobs")
     pages = relationship("OCRPage", back_populates="job", cascade="all, delete-orphan")
     session_documents = relationship("SessionDocument", back_populates="job", cascade="all, delete-orphan")
+    chunks = relationship("DocumentChunk", back_populates="job", cascade="all, delete-orphan")
 
 
 class OCRPage(Base):
@@ -169,6 +179,23 @@ class SessionDocument(Base):
     # Relationships
     session = relationship("Session", back_populates="documents")
     job = relationship("Job", back_populates="session_documents")
+
+
+class DocumentChunk(Base):
+    """RAG용 문서 청크 테이블"""
+    __tablename__ = "document_chunks"
+
+    chunk_id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(String(36), ForeignKey("jobs.job_id", ondelete="CASCADE"), nullable=False)
+    chunk_index = Column(Integer, nullable=False)
+    text = Column(Text, nullable=False)
+    page_number = Column(Integer, nullable=True)
+    char_start = Column(Integer, nullable=True)
+    char_end = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    # Relationships
+    job = relationship("Job", back_populates="chunks")
 
 
 def init_db():
