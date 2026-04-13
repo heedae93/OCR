@@ -95,11 +95,28 @@ export default function MetadataPage() {
     <div className="relative flex min-h-screen w-full bg-background-light dark:bg-background-dark">
       <Sidebar />
       <div className="flex flex-col gap-6 p-8 flex-1 max-w-3xl">
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary-light dark:text-text-primary-dark">메타데이터 관리</h1>
-          <p className="mt-1 text-sm text-text-secondary-light dark:text-text-secondary-dark">
-            OCR 작업 완료 시 자동으로 추출할 메타데이터 항목을 선택하세요.
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-text-primary-light dark:text-text-primary-dark">메타데이터 관리</h1>
+            <p className="mt-1 text-sm text-text-secondary-light dark:text-text-secondary-dark">
+              OCR 작업 완료 시 자동으로 추출할 메타데이터 항목을 선택하세요.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {saved && (
+              <span className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
+                <span className="material-symbols-outlined text-base">check_circle</span>
+                저장됐습니다
+              </span>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={saving || loading}
+              className="px-6 py-2.5 bg-primary text-white font-semibold rounded-xl hover:bg-primary/90 disabled:opacity-60 transition-colors"
+            >
+              {saving ? '저장 중...' : '설정 저장'}
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -167,22 +184,6 @@ export default function MetadataPage() {
               </ul>
             </div>
 
-            {/* 저장 버튼 */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-6 py-2.5 bg-primary text-white font-semibold rounded-xl hover:bg-primary/90 disabled:opacity-60 transition-colors"
-              >
-                {saving ? '저장 중...' : '설정 저장'}
-              </button>
-              {saved && (
-                <span className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
-                  <span className="material-symbols-outlined text-base">check_circle</span>
-                  저장됐습니다
-                </span>
-              )}
-            </div>
           </>
         )}
       </div>
