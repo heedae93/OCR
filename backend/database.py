@@ -198,6 +198,42 @@ class DocumentChunk(Base):
     job = relationship("Job", back_populates="chunks")
 
 
+class FileVersion(Base):
+    """파일 버전 관리"""
+    __tablename__ = "file_versions"
+
+    version_id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(String(36), ForeignKey("jobs.job_id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    version_number = Column(Integer, nullable=False, default=1)
+    version_label = Column(String(100), nullable=True)   # 예: "v1.0", "최종본"
+    note = Column(Text, nullable=True)
+    pdf_file_path = Column(String(500), nullable=True)
+    ocr_json_path = Column(String(500), nullable=True)
+    file_size_bytes = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    job = relationship("Job")
+    user = relationship("User")
+
+
+class DownloadHistory(Base):
+    """다운로드 이력"""
+    __tablename__ = "download_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(String(36), ForeignKey("jobs.job_id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    version_id = Column(Integer, ForeignKey("file_versions.version_id", ondelete="SET NULL"), nullable=True)
+    file_type = Column(String(20), nullable=True)   # pdf, excel, json
+    downloaded_at = Column(DateTime, default=datetime.now)
+    ip_address = Column(String(50), nullable=True)
+
+    job = relationship("Job")
+    user = relationship("User")
+    version = relationship("FileVersion")
+
+
 def init_db():
     """Initialize database and create tables"""
     try:

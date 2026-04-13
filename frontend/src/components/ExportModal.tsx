@@ -114,10 +114,11 @@ export default function ExportModal({ isOpen, onClose, jobId, onExport, isExport
       } else if (formats.length === 1) {
         // Single format - direct download
         const format = formats[0]
+        const userId = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}').user_id || '' } catch { return '' } })()
         const endpoints: Record<string, string> = {
-          txt: `/api/export/${jobId}/txt`,
-          xml: `/api/export/${jobId}/xml`,
-          excel: `/api/export/${jobId}/excel`,
+          txt: `/api/export/${jobId}/txt?user_id=${userId}`,
+          xml: `/api/export/${jobId}/xml?user_id=${userId}`,
+          excel: `/api/export/${jobId}/excel?user_id=${userId}`,
         }
         const url = `${API_BASE_URL}${endpoints[format]}`
         const link = document.createElement('a')
@@ -128,7 +129,8 @@ export default function ExportModal({ isOpen, onClose, jobId, onExport, isExport
         document.body.removeChild(link)
       } else {
         // Multiple formats - use ZIP export
-        const url = `${API_BASE_URL}/api/export/${jobId}/multi`
+        const userId = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}').user_id || '' } catch { return '' } })()
+        const url = `${API_BASE_URL}/api/export/${jobId}/multi?user_id=${userId}`
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

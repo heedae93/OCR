@@ -50,6 +50,7 @@ from core.ctc_patch import patch_ctc_decoder
 
 from api import ocr, storage, drive, jobs, sessions, settings, export, auth, users,masking
 from api import metadata_settings
+from api import history
 
 
 # CTC patch는 paddleocr 임포트 이후에 적용 (paddlex 재초기화 충돌 방지)
@@ -103,6 +104,7 @@ app.include_router(auth.router, prefix="/api", tags=["Auth"])
 app.include_router(masking.router, tags=["Masking"])
 app.include_router(users.router, prefix="/api", tags=["Users"])
 app.include_router(metadata_settings.router, prefix="/api", tags=["MetadataSettings"])
+app.include_router(history.router, prefix="/api", tags=["History"])
 
 # Mount static files
 try:

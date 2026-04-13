@@ -29,6 +29,7 @@ from core.reading_order_sorter import ReadingOrderSorter
 from utils.job_manager import JobManager
 from utils.file_utils import save_uploaded_file, generate_unique_id, cleanup_temp_files
 from utils.smart_layers import apply_smart_layers_to_image
+from database import SessionLocal, Job as DBJob, DownloadHistory, FileVersion
 
 # Import pdf_gen pipeline components
 from core.pdf_gen_pipeline import CustomOCRModel, OCRPDFGenerator
@@ -1079,11 +1080,23 @@ def _convert_page_lines_to_raw(page: Optional[OCRPage]) -> list:
 
 
 @router.post("/export/{job_id}")
-async def export_with_smart_tools(job_id: str, payload: PDFExportRequest):
+async def export_with_smart_tools(job_id: str, payload: PDFExportRequest, user_id: str = ""):
     """Apply Smart Tool edits and regenerate the final PDF."""
     job = job_manager.get_job(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        # job_manager는 메모리 기반이라 재시작 후 사라짐 → DB에서 fallback 조회
+        try:
+            db = SessionLocal()
+            db_job = db.query(DBJob).filter_by(job_id=job_id).first()
+            db.close()
+            if db_job:
+                job = {"job_id": job_id, "status": db_job.status, "original_filename": db_job.original_filename}
+            else:
+                raise HTTPException(status_code=404, detail="Job not found")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=404, detail="Job not found")
 
     if payload.ocr_results.job_id != job_id:
         logger.warning("Payload job_id mismatch detected. Overriding with server job_id.")
@@ -1224,6 +1237,34 @@ async def export_with_smart_tools(job_id: str, payload: PDFExportRequest):
         json_url = f"/api/download-json/{job_id}?v={timestamp}"
 
         job_manager.update_job(job_id, pdf_url=pdf_url)
+
+        # 다운로드 이력 기록 + 버전 자동 생성
+        if user_id:
+            try:
+                db = SessionLocal()
+                # 다운로드 이력
+                record = DownloadHistory(job_id=job_id, user_id=user_id, file_type="pdf")
+                db.add(record)
+
+                # 버전 자동 생성
+                last = db.query(FileVersion).filter_by(job_id=job_id).order_by(FileVersion.version_number.desc()).first()
+                next_num = (last.version_number + 1) if last else 1
+                db_job = db.query(DBJob).filter_by(job_id=job_id).first()
+                version = FileVersion(
+                    job_id=job_id,
+                    user_id=user_id,
+                    version_number=next_num,
+                    version_label=f"v{next_num}.0",
+                    note="내보내기 시 자동 생성",
+                    pdf_file_path=str(final_pdf_path),
+                    ocr_json_path=str(updated_json_path),
+                    file_size_bytes=final_pdf_path.stat().st_size if final_pdf_path.exists() else None,
+                )
+                db.add(version)
+                db.commit()
+                db.close()
+            except Exception as e:
+                logger.warning(f"Failed to record download/version: {e}")
 
         return {
             "message": "Export completed",
