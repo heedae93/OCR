@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, or_, func, cast, Date
 
-from database import get_db, Job, OCRPage, User
+from database import get_db, Job, OCRPage, User, Session as DBSession, SessionDocument
 from models.job import JobResponse
 
 logger = logging.getLogger(__name__)
@@ -303,6 +303,172 @@ async def get_trend(user_id: str = "default", period: str = "daily", db: Session
         }
     except Exception as e:
         logger.error(f"Failed to get trend: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/jobs/statistics/accuracy")
+async def get_accuracy_distribution(user_id: str = "default", db: Session = Depends(get_db)):
+    """Get OCR accuracy distribution (confidence buckets)"""
+    try:
+        jobs = db.query(Job).filter(
+            Job.user_id == user_id,
+            Job.status == "completed",
+            Job.average_confidence != None
+        ).all()
+
+        high = sum(1 for j in jobs if j.average_confidence >= 0.9)
+        mid = sum(1 for j in jobs if 0.7 <= j.average_confidence < 0.9)
+        low = sum(1 for j in jobs if j.average_confidence < 0.7)
+        total = len(jobs)
+
+        return {
+            "total": total,
+            "high": high,    # 90%+
+            "mid": mid,      # 70~90%
+            "low": low,      # 70% 미만
+            "high_pct": round(high / total * 100, 1) if total else 0,
+            "mid_pct": round(mid / total * 100, 1) if total else 0,
+            "low_pct": round(low / total * 100, 1) if total else 0,
+        }
+    except Exception as e:
+        logger.error(f"Failed to get accuracy distribution: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/jobs/statistics/file-types")
+async def get_file_type_distribution(user_id: str = "default", db: Session = Depends(get_db)):
+    """Get file type breakdown"""
+    try:
+        counts = db.query(Job.file_type, func.count(Job.job_id)).filter(
+            Job.user_id == user_id
+        ).group_by(Job.file_type).all()
+
+        result = {}
+        total = 0
+        for ft, cnt in counts:
+            key = (ft or 'unknown').lower()
+            result[key] = result.get(key, 0) + cnt
+            total += cnt
+
+        return {"total": total, "counts": result}
+    except Exception as e:
+        logger.error(f"Failed to get file type distribution: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/jobs/statistics/processing-time")
+async def get_processing_time_distribution(user_id: str = "default", db: Session = Depends(get_db)):
+    """Get processing time distribution (fast/normal/slow)"""
+    try:
+        jobs = db.query(Job).filter(
+            Job.user_id == user_id,
+            Job.status == "completed",
+            Job.processing_time_seconds != None
+        ).all()
+
+        fast = sum(1 for j in jobs if j.processing_time_seconds < 30)
+        normal = sum(1 for j in jobs if 30 <= j.processing_time_seconds < 120)
+        slow = sum(1 for j in jobs if j.processing_time_seconds >= 120)
+        total = len(jobs)
+
+        return {
+            "total": total,
+            "fast": fast,    # < 30s
+            "normal": normal, # 30~120s
+            "slow": slow,    # 120s+
+            "fast_pct": round(fast / total * 100, 1) if total else 0,
+            "normal_pct": round(normal / total * 100, 1) if total else 0,
+            "slow_pct": round(slow / total * 100, 1) if total else 0,
+        }
+    except Exception as e:
+        logger.error(f"Failed to get processing time distribution: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/jobs/statistics/monthly-pages")
+async def get_monthly_pages(user_id: str = "default", db: Session = Depends(get_db)):
+    """Get monthly cumulative page counts (last 12 months)"""
+    try:
+        today = date.today()
+        labels = []
+        pages_list = []
+        cumulative = 0
+        monthly_data = []
+
+        for i in range(11, -1, -1):
+            m = today.month - i
+            y = today.year
+            while m <= 0:
+                m += 12
+                y -= 1
+            month_start = date(y, m, 1)
+            if m == 12:
+                month_end = date(y + 1, 1, 1) - timedelta(days=1)
+            else:
+                month_end = date(y, m + 1, 1) - timedelta(days=1)
+
+            pages = db.query(func.sum(Job.total_pages)).filter(
+                Job.user_id == user_id,
+                Job.status == "completed",
+                cast(Job.completed_at, Date) >= month_start,
+                cast(Job.completed_at, Date) <= month_end
+            ).scalar() or 0
+
+            labels.append(f"{m}월")
+            monthly_data.append(int(pages))
+
+        # Build cumulative
+        running = 0
+        cumulative_data = []
+        for v in monthly_data:
+            running += v
+            cumulative_data.append(running)
+
+        return {
+            "labels": labels,
+            "monthly": monthly_data,
+            "cumulative": cumulative_data
+        }
+    except Exception as e:
+        logger.error(f"Failed to get monthly pages: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/jobs/statistics/sessions")
+async def get_session_statistics(user_id: str = "default", db: Session = Depends(get_db)):
+    """Get session-based work statistics"""
+    try:
+        sessions = db.query(DBSession).filter(DBSession.user_id == user_id).all()
+        result = []
+
+        for session in sessions:
+            docs = db.query(SessionDocument).filter(
+                SessionDocument.session_id == session.session_id
+            ).all()
+            job_ids = [d.job_id for d in docs]
+            if not job_ids:
+                continue
+
+            jobs = db.query(Job).filter(Job.job_id.in_(job_ids)).all()
+            total = len(jobs)
+            completed = sum(1 for j in jobs if j.status == "completed")
+            failed = sum(1 for j in jobs if j.status == "failed")
+            last_job = max((j.created_at for j in jobs if j.created_at), default=None)
+
+            result.append({
+                "session_id": session.session_id,
+                "session_name": session.session_name,
+                "total": total,
+                "completed": completed,
+                "failed": failed,
+                "completion_rate": round(completed / total * 100, 1) if total else 0,
+                "last_activity": last_job.isoformat() if last_job else None
+            })
+
+        result.sort(key=lambda x: x["last_activity"] or "", reverse=True)
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get session statistics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
