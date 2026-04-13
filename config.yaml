@@ -328,8 +328,8 @@ user:
 #  비워두면 로컬 SQLite(data/ocr_gen.db)를 사용합니다.
 #
 database:
-  # MariaDB/MySQL 예시 (아이디:ocr_user / 비밀번호:ocr_password / 호스트:192.168.0.231 / DB이름:ocr_db)
-  url: "mysql+pymysql://ocr_user:1234@192.168.0.231:3306/ocr_db"
+  # PostgreSQL 예시 (아이디:ocr_user / 비밀번호:1234 / 호스트:192.168.0.231 / DB이름:ocr_db)
+  url: "postgresql+psycopg2://ocr_user:1234@192.168.0.231:3306/ocr_db"
 
   # SQLite 예시 (기본값)
   # url: "sqlite:///data/ocr_gen.db"

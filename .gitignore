@@ -65,3 +65,11 @@ Thumbs.db
 !frontend/public/**/*.png
 !docs/**/*.png
 =*
+
+# Trained models (too large for git)
+backend/models/
+
+# Test data PDFs
+backend/test_data/*.pdf
+backend/test_data/**/*.pdf
+backend/test_data/embeddings_cache.json

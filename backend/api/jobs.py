@@ -3,10 +3,10 @@ Jobs API endpoints - Database-backed job management
 """
 import logging
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, or_, func
+from sqlalchemy import desc, or_, func, cast, Date
 
 from database import get_db, Job, OCRPage, User
 from models.job import JobResponse
@@ -190,17 +190,119 @@ async def get_statistics(user_id: str = "default", db: Session = Depends(get_db)
             Job.user_id == user_id
         ).scalar() or 0
 
+        # Today completed jobs
+        today = date.today()
+        today_completed = db.query(func.count(Job.job_id)).filter(
+            Job.user_id == user_id,
+            Job.status == "completed",
+            func.date(Job.completed_at) == today
+        ).scalar() or 0
+
         return {
             "total_jobs": total_jobs,
             "status_counts": {status: count for status, count in status_counts},
             "total_pages_processed": total_pages,
             "average_processing_time_seconds": float(avg_processing_time) if avg_processing_time else 0,
             "storage_used_bytes": storage_used,
-            "storage_used_mb": round(storage_used / (1024 * 1024), 2)
+            "storage_used_mb": round(storage_used / (1024 * 1024), 2),
+            "today_completed": today_completed
         }
 
     except Exception as e:
         logger.error(f"Failed to get statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/jobs/statistics/trend")
+async def get_trend(user_id: str = "default", period: str = "daily", db: Session = Depends(get_db)):
+    """Get processing trend data (daily/weekly/monthly)"""
+    try:
+        today = date.today()
+
+        if period == "daily":
+            days = 14
+            labels = [(today - timedelta(days=i)).strftime("%m/%d") for i in range(days - 1, -1, -1)]
+            dates = [(today - timedelta(days=i)) for i in range(days - 1, -1, -1)]
+
+            completed_counts = []
+            failed_counts = []
+            for d in dates:
+                c = db.query(func.count(Job.job_id)).filter(
+                    Job.user_id == user_id,
+                    Job.status == "completed",
+                    cast(Job.completed_at, Date) == d
+                ).scalar() or 0
+                f = db.query(func.count(Job.job_id)).filter(
+                    Job.user_id == user_id,
+                    Job.status == "failed",
+                    cast(Job.created_at, Date) == d
+                ).scalar() or 0
+                completed_counts.append(c)
+                failed_counts.append(f)
+
+        elif period == "weekly":
+            weeks = 8
+            labels = []
+            completed_counts = []
+            failed_counts = []
+            for i in range(weeks - 1, -1, -1):
+                week_end = today - timedelta(weeks=i)
+                week_start = week_end - timedelta(days=6)
+                labels.append(f"{week_start.strftime('%m/%d')}~{week_end.strftime('%m/%d')}")
+                c = db.query(func.count(Job.job_id)).filter(
+                    Job.user_id == user_id,
+                    Job.status == "completed",
+                    cast(Job.completed_at, Date) >= week_start,
+                    cast(Job.completed_at, Date) <= week_end
+                ).scalar() or 0
+                f = db.query(func.count(Job.job_id)).filter(
+                    Job.user_id == user_id,
+                    Job.status == "failed",
+                    cast(Job.created_at, Date) >= week_start,
+                    cast(Job.created_at, Date) <= week_end
+                ).scalar() or 0
+                completed_counts.append(c)
+                failed_counts.append(f)
+
+        else:  # monthly
+            months = 6
+            labels = []
+            completed_counts = []
+            failed_counts = []
+            for i in range(months - 1, -1, -1):
+                m = today.month - i
+                y = today.year
+                while m <= 0:
+                    m += 12
+                    y -= 1
+                labels.append(f"{y}/{m:02d}")
+                month_start = date(y, m, 1)
+                if m == 12:
+                    month_end = date(y + 1, 1, 1) - timedelta(days=1)
+                else:
+                    month_end = date(y, m + 1, 1) - timedelta(days=1)
+                c = db.query(func.count(Job.job_id)).filter(
+                    Job.user_id == user_id,
+                    Job.status == "completed",
+                    cast(Job.completed_at, Date) >= month_start,
+                    cast(Job.completed_at, Date) <= month_end
+                ).scalar() or 0
+                f = db.query(func.count(Job.job_id)).filter(
+                    Job.user_id == user_id,
+                    Job.status == "failed",
+                    cast(Job.created_at, Date) >= month_start,
+                    cast(Job.created_at, Date) <= month_end
+                ).scalar() or 0
+                completed_counts.append(c)
+                failed_counts.append(f)
+
+        return {
+            "labels": labels,
+            "completed": completed_counts,
+            "failed": failed_counts
+        }
+    except Exception as e:
+        logger.error(f"Failed to get trend: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

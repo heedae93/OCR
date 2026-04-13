@@ -109,6 +109,7 @@ export default function OcrWorkPage() {
 
 // ─── Tab 1: 직접 업로드 ──────────────────────────────────────────────────────
 function DirectUploadTab() {
+  const router = useRouter()
   const [sessionName, setSessionName] = useState('')
   const [queue, setQueue] = useState<QueueFile[]>([])
   const [isRunning, setIsRunning] = useState(false)
@@ -196,9 +197,12 @@ function DirectUploadTab() {
     setIsRunning(true)
     setIsDone(false)
 
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    const userId = user.user_id || ''
+
     let sessionId: string
     try {
-      const res = await fetch(`${API_BASE}/sessions`, {
+      const res = await fetch(`${API_BASE}/sessions?user_id=${encodeURIComponent(userId)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_name: sessionName, description: '' }),
@@ -216,7 +220,7 @@ function DirectUploadTab() {
         updateFile(qf.id, { status: 'uploading', progress: 0 })
         const jobId = await new Promise<string>((resolve, reject) => {
           const xhr = new XMLHttpRequest()
-          xhr.open('POST', `${API_BASE}/upload`)
+          xhr.open('POST', `${API_BASE}/upload?user_id=${encodeURIComponent(userId)}`)
           xhr.upload.onprogress = e => {
             if (e.lengthComputable)
               updateFile(qf.id, { progress: Math.round((e.loaded / e.total) * 50) })
@@ -376,7 +380,11 @@ function DirectUploadTab() {
         ) : (
           <ul className="divide-y divide-border-light dark:divide-border-dark overflow-y-auto">
             {queue.map(qf => (
-              <li key={qf.id} className="px-5 py-4">
+              <li
+                key={qf.id}
+                className={`px-5 py-4 ${qf.status === 'completed' && qf.jobId ? 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors' : ''}`}
+                onClick={() => { if (qf.status === 'completed' && qf.jobId) router.push(`/editor/${qf.jobId}`) }}
+              >
                 <div className="flex items-center gap-3">
                   <div className="flex-shrink-0">
                     {qf.status === 'pending' && <Clock className="w-4 h-4 text-gray-400" />}

@@ -60,7 +60,8 @@ export default function Dashboard() {
   const fetchData = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_BASE}/sessions`)
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      const response = await fetch(`${API_BASE}/sessions?user_id=${user.user_id || ''}`)
       if (response.ok) {
         const data: Session[] = await response.json()
         setSessions(data)
@@ -194,7 +195,7 @@ export default function Dashboard() {
             </p>
           </div>
           <button
-            onClick={() => setShowNewSessionModal(true)}
+            onClick={() => router.push('/ocr-work')}
             className="flex items-center gap-2 px-6 py-3 bg-white text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-colors whitespace-nowrap"
           >
             <Zap className="w-5 h-5" />

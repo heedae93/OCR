@@ -94,6 +94,8 @@ export default function EditorPage() {
   const [textElements, setTextElements] = useState<TextElement[]>([]);
   const [pageWidth, setPageWidth] = useState(0);
   const [pageHeight, setPageHeight] = useState(0);
+  const [previewCollapsed, setPreviewCollapsed] = useState(false);
+  const [showSmartTools, setShowSmartTools] = useState(false);
 
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
@@ -759,94 +761,129 @@ export default function EditorPage() {
             />
 
             {/* Page Thumbnails Sidebar */}
-            <aside className="flex h-full w-64 flex-shrink-0 flex-col justify-between border-r border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark p-4 overflow-y-auto">
-              <div className="flex flex-col gap-4">
-                <div>
-                  <h2 className="text-base font-medium text-text-primary-light dark:text-text-primary-dark">
-                    페이지 미리보기
-                  </h2>
-                  <p className="text-sm text-text-secondary-light dark:text-text-secondary-dark">
-                    드래그하여 페이지 순서 변경
-                  </p>
+            <aside
+              className={`flex h-full flex-shrink-0 flex-col justify-between border-r border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark overflow-y-auto transition-all duration-300 ${previewCollapsed ? "w-10 p-0" : "w-64 p-4"}`}
+            >
+              {previewCollapsed ? (
+                <div className="flex flex-col items-center pt-3 gap-2">
+                  <button
+                    onClick={() => setPreviewCollapsed(false)}
+                    className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary-light dark:text-text-secondary-dark"
+                    title="미리보기 펼치기"
+                  >
+                    <span className="material-symbols-outlined text-xl">
+                      chevron_right
+                    </span>
+                  </button>
+                  <span className="text-xs text-text-secondary-light dark:text-text-secondary-dark [writing-mode:vertical-rl] mt-2 select-none">
+                    미리보기
+                  </span>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {(() => {
-                    // Determine page list to show
-                    const pageList = ocrResults?.pages
-                      ? ocrResults.pages.map((p) => p.page_number)
-                      : totalPdfPages > 0
-                        ? Array.from({ length: totalPdfPages }, (_, i) => i + 1)
-                        : [1];
-
-                    return pageList.map((pageNum) => (
-                      <div
-                        key={pageNum}
-                        ref={(el) => registerThumbnailRef(pageNum, el)}
-                        data-page={pageNum}
-                        onClick={() => setCurrentPage(pageNum)}
-                        className="group relative flex flex-col gap-2 cursor-pointer"
-                      >
-                        <div
-                          className={`w-full rounded-lg bg-gray-200 dark:bg-gray-700 aspect-[3/4] flex items-center justify-center overflow-hidden transition-all ${
-                            currentPage === pageNum
-                              ? "ring-2 ring-primary shadow-lg"
-                              : "hover:ring-1 hover:ring-primary/50"
-                          }`}
-                        >
-                          {pageThumbnails[pageNum] ? (
-                            <img
-                              src={pageThumbnails[pageNum]}
-                              alt={`Page ${pageNum}`}
-                              className="w-full h-full object-contain"
-                              loading="lazy"
-                            />
-                          ) : (
-                            <div className="flex flex-col items-center gap-1">
-                              <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                              <span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">
-                                {pageNum}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <p
-                          className={`text-sm font-medium text-center ${
-                            currentPage === pageNum
-                              ? "text-primary"
-                              : "text-text-primary-light dark:text-text-primary-dark"
-                          }`}
-                        >
-                          {pageNum}
+              ) : (
+                <>
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-base font-medium text-text-primary-light dark:text-text-primary-dark">
+                          페이지 미리보기
+                        </h2>
+                        <p className="text-sm text-text-secondary-light dark:text-text-secondary-dark">
+                          드래그하여 페이지 순서 변경
                         </p>
-                        {ocrResults?.pages && (
-                          <div className="absolute top-1 right-1 hidden group-hover:flex gap-1">
-                            <button className="flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70">
-                              <span className="material-symbols-outlined text-sm">
-                                rotate_90_degrees_ccw
-                              </span>
-                            </button>
-                            <button className="flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white hover:bg-red-500">
-                              <span className="material-symbols-outlined text-sm">
-                                delete
-                              </span>
-                            </button>
-                          </div>
-                        )}
                       </div>
-                    ));
-                  })()}
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                <button className="flex h-10 w-full cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg bg-primary/20 text-sm font-bold text-primary hover:bg-primary/30">
-                  <span className="material-symbols-outlined">add</span>
-                  <span className="truncate">페이지 추가</span>
-                </button>
-                <button className="flex h-10 w-full items-center justify-center gap-2 rounded-lg text-sm font-medium text-text-secondary-light dark:text-text-secondary-dark hover:bg-black/5 dark:hover:bg-white/10">
-                  <span className="material-symbols-outlined">map</span>
-                  <span>페이지 맵</span>
-                </button>
-              </div>
+                      <button
+                        onClick={() => setPreviewCollapsed(true)}
+                        className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary-light dark:text-text-secondary-dark flex-shrink-0"
+                        title="미리보기 접기"
+                      >
+                        <span className="material-symbols-outlined text-xl">
+                          chevron_left
+                        </span>
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {(() => {
+                        // Determine page list to show
+                        const pageList = ocrResults?.pages
+                          ? ocrResults.pages.map((p) => p.page_number)
+                          : totalPdfPages > 0
+                            ? Array.from(
+                                { length: totalPdfPages },
+                                (_, i) => i + 1,
+                              )
+                            : [1];
+
+                        return pageList.map((pageNum) => (
+                          <div
+                            key={pageNum}
+                            ref={(el) => registerThumbnailRef(pageNum, el)}
+                            data-page={pageNum}
+                            onClick={() => setCurrentPage(pageNum)}
+                            className="group relative flex flex-col gap-2 cursor-pointer"
+                          >
+                            <div
+                              className={`w-full rounded-lg bg-gray-200 dark:bg-gray-700 aspect-[3/4] flex items-center justify-center overflow-hidden transition-all ${
+                                currentPage === pageNum
+                                  ? "ring-2 ring-primary shadow-lg"
+                                  : "hover:ring-1 hover:ring-primary/50"
+                              }`}
+                            >
+                              {pageThumbnails[pageNum] ? (
+                                <img
+                                  src={pageThumbnails[pageNum]}
+                                  alt={`Page ${pageNum}`}
+                                  className="w-full h-full object-contain"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="flex flex-col items-center gap-1">
+                                  <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                                  <span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">
+                                    {pageNum}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                            <p
+                              className={`text-sm font-medium text-center ${
+                                currentPage === pageNum
+                                  ? "text-primary"
+                                  : "text-text-primary-light dark:text-text-primary-dark"
+                              }`}
+                            >
+                              {pageNum}
+                            </p>
+                            {ocrResults?.pages && (
+                              <div className="absolute top-1 right-1 hidden group-hover:flex gap-1">
+                                <button className="flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70">
+                                  <span className="material-symbols-outlined text-sm">
+                                    rotate_90_degrees_ccw
+                                  </span>
+                                </button>
+                                <button className="flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white hover:bg-red-500">
+                                  <span className="material-symbols-outlined text-sm">
+                                    delete
+                                  </span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <button className="flex h-10 w-full cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg bg-primary/20 text-sm font-bold text-primary hover:bg-primary/30">
+                      <span className="material-symbols-outlined">add</span>
+                      <span className="truncate">페이지 추가</span>
+                    </button>
+                    <button className="flex h-10 w-full items-center justify-center gap-2 rounded-lg text-sm font-medium text-text-secondary-light dark:text-text-secondary-dark hover:bg-black/5 dark:hover:bg-white/10">
+                      <span className="material-symbols-outlined">map</span>
+                      <span>페이지 맵</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </aside>
 
             {/* Center - PDF Viewer */}
@@ -925,6 +962,20 @@ export default function EditorPage() {
                 </div>
                 <div className="flex items-center gap-2 min-w-[300px] justify-end">
                   <button
+                    onClick={() => setShowSmartTools(!showSmartTools)}
+                    className={`flex items-center gap-2 p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 whitespace-nowrap ${
+                      showSmartTools
+                        ? "bg-primary/10 text-primary"
+                        : "text-text-secondary-light dark:text-text-secondary-dark"
+                    }`}
+                    title="Smart Tools"
+                  >
+                    <span className="material-symbols-outlined">build</span>
+                    <span className="text-sm hidden lg:inline">
+                      Smart Tools
+                    </span>
+                  </button>
+                  <button
                     onClick={() => setShowOCRComparison(!showOCRComparison)}
                     className={`flex items-center gap-2 p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 whitespace-nowrap ${
                       showOCRComparison
@@ -966,7 +1017,9 @@ export default function EditorPage() {
                       }
                       setMaskingLoading(true);
                       try {
-                        const res = await fetch(`${API_BASE_URL}/api/masking/${jobId}/detect`);
+                        const res = await fetch(
+                          `${API_BASE_URL}/api/masking/${jobId}/detect`,
+                        );
                         if (!res.ok) throw new Error("PII 감지 실패");
                         const data = await res.json();
                         setMaskingData(data.masked_boxes || []);
@@ -1041,279 +1094,290 @@ export default function EditorPage() {
               </div>
             </section>
 
-            {/* Right Sidebar - Tools */}
-            <aside className="hidden h-full w-72 flex-shrink-0 flex-col border-l border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark p-4 lg:flex">
-              <div className="flex items-center border-b border-border-light dark:border-border-dark">
-                <button className="flex-1 py-3 text-sm font-semibold border-b-2 border-primary text-primary">
-                  Smart Tools
-                </button>
-                <button className="flex-1 py-3 text-sm font-medium text-text-secondary-light dark:text-text-secondary-dark hover:border-b-2 hover:border-gray-300 dark:hover:border-gray-500 hover:text-text-primary-light dark:hover:text-text-primary-dark">
-                  변경 내역
-                </button>
-              </div>
-              <div className="flex flex-1 flex-col gap-4 pt-6 overflow-y-auto">
-                {/* OCR Insertion Button */}
-                {!hasOCRResults && !isProcessingOCR && (
+            {/* Smart Tools Floating Panel */}
+            {showSmartTools && (
+              <aside className="h-full w-72 flex-shrink-0 flex-col border-l border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark p-4 flex">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-sm font-semibold text-text-primary-light dark:text-text-primary-dark">
+                    Smart Tools
+                  </span>
                   <button
-                    onClick={handleStartOCR}
-                    className="flex items-center justify-center gap-2 p-4 rounded-lg bg-gradient-to-r from-primary to-purple-600 text-white font-semibold hover:opacity-90 transition-opacity"
+                    onClick={() => setShowSmartTools(false)}
+                    className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary-light dark:text-text-secondary-dark"
                   >
-                    <span className="material-symbols-outlined">
-                      auto_fix_high
+                    <span className="material-symbols-outlined text-xl">
+                      close
                     </span>
-                    <span>OCR 텍스트 레이어 삽입</span>
                   </button>
-                )}
-
-                {isProcessingOCR && (
-                  <div className="flex flex-col items-center gap-2 p-4 rounded-lg bg-primary/10 border border-primary">
-                    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-                    <p className="text-sm text-primary font-medium">
-                      OCR 처리 중...
-                    </p>
-                    {job?.progress_percent ? (
-                      <p className="text-xs text-text-secondary-light dark:text-text-secondary-dark">
-                        {Math.round(job.progress_percent)}% 완료
-                      </p>
-                    ) : null}
-                  </div>
-                )}
-
-                {hasOCRResults && (
-                  <div className="flex flex-col gap-2 p-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-500">
-                    <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                </div>
+                <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
+                  {/* OCR Insertion Button */}
+                  {!hasOCRResults && !isProcessingOCR && (
+                    <button
+                      onClick={handleStartOCR}
+                      className="flex items-center justify-center gap-2 p-4 rounded-lg bg-gradient-to-r from-primary to-purple-600 text-white font-semibold hover:opacity-90 transition-opacity"
+                    >
                       <span className="material-symbols-outlined">
-                        check_circle
+                        auto_fix_high
                       </span>
-                      <span className="font-semibold">OCR 완료</span>
-                    </div>
-                    <p className="text-xs text-text-secondary-light dark:text-text-secondary-dark">
-                      {ocrResults?.total_bboxes || 0}개의 텍스트 박스 감지됨
-                    </p>
-                    <button
-                      onClick={() => setShowOCRPanel(!showOCRPanel)}
-                      className="mt-2 flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-primary text-white text-sm font-medium hover:bg-primary/90"
-                    >
-                      <span className="material-symbols-outlined text-base">
-                        edit_note
-                      </span>
-                      <span>
-                        {showOCRPanel ? "OCR 패널 닫기" : "OCR 텍스트 편집"}
-                      </span>
+                      <span>OCR 텍스트 레이어 삽입</span>
                     </button>
-                  </div>
-                )}
+                  )}
 
-                <div className="h-px bg-border-light dark:border-border-dark"></div>
+                  {isProcessingOCR && (
+                    <div className="flex flex-col items-center gap-2 p-4 rounded-lg bg-primary/10 border border-primary">
+                      <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                      <p className="text-sm text-primary font-medium">
+                        OCR 처리 중...
+                      </p>
+                      {job?.progress_percent ? (
+                        <p className="text-xs text-text-secondary-light dark:text-text-secondary-dark">
+                          {Math.round(job.progress_percent)}% 완료
+                        </p>
+                      ) : null}
+                    </div>
+                  )}
 
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    {
-                      icon: "edit",
-                      label: "텍스트 편집",
-                      tool: "text" as ToolType,
-                    },
-                    {
-                      icon: "add_photo_alternate",
-                      label: "이미지",
-                      tool: "image" as ToolType,
-                    },
-                    {
-                      icon: "signature",
-                      label: "서명",
-                      tool: "signature" as ToolType,
-                    },
-                    { icon: "draw", label: "그리기", tool: "draw" as ToolType },
-                    {
-                      icon: "shapes",
-                      label: "도형",
-                      tool: "shape" as ToolType,
-                    },
-                    {
-                      icon: "sticky_note_2",
-                      label: "스티커",
-                      tool: "sticker" as ToolType,
-                    },
-                  ].map((tool) => (
-                    <button
-                      key={tool.icon}
-                      onClick={() => handleToolClick(tool.tool)}
-                      className={`flex flex-col items-center gap-1.5 p-2 rounded-lg transition-colors ${
-                        activeTool === tool.tool
-                          ? "bg-primary/20 dark:bg-primary/30"
-                          : "hover:bg-black/5 dark:hover:bg-white/10"
-                      }`}
-                    >
-                      <div
-                        className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                          activeTool === tool.tool
-                            ? "bg-primary text-white"
-                            : "bg-primary/10 text-primary"
-                        }`}
-                      >
+                  {hasOCRResults && (
+                    <div className="flex flex-col gap-2 p-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-500">
+                      <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
                         <span className="material-symbols-outlined">
-                          {tool.icon}
+                          check_circle
                         </span>
+                        <span className="font-semibold">OCR 완료</span>
                       </div>
-                      <span
-                        className={`text-xs text-center ${
-                          activeTool === tool.tool
-                            ? "text-primary font-medium"
-                            : "text-text-secondary-light dark:text-text-secondary-dark"
-                        }`}
+                      <p className="text-xs text-text-secondary-light dark:text-text-secondary-dark">
+                        {ocrResults?.total_bboxes || 0}개의 텍스트 박스 감지됨
+                      </p>
+                      <button
+                        onClick={() => setShowOCRPanel(!showOCRPanel)}
+                        className="mt-2 flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-primary text-white text-sm font-medium hover:bg-primary/90"
                       >
-                        {tool.label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="h-px bg-border-light dark:bg-border-dark"></div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    {
-                      icon: "format_ink_highlighter",
-                      label: "하이라이트",
-                      tool: "highlight" as ToolType,
-                    },
-                    {
-                      icon: "select_all",
-                      label: "영역 선택",
-                      tool: "select" as ToolType,
-                    },
-                    {
-                      icon: "rotate_90_degrees_cw",
-                      label: "페이지 회전",
-                      tool: "rotate" as ToolType,
-                    },
-                    {
-                      icon: "account_tree",
-                      label: "구조 편집",
-                      tool: "structure" as ToolType,
-                    },
-                  ].map((tool) => (
-                    <button
-                      key={tool.icon}
-                      onClick={() => handleToolClick(tool.tool)}
-                      className={`flex flex-col items-center gap-1.5 p-2 rounded-lg transition-colors ${
-                        activeTool === tool.tool
-                          ? "bg-primary/20 dark:bg-primary/30"
-                          : "hover:bg-black/5 dark:hover:bg-white/10"
-                      }`}
-                    >
-                      <div
-                        className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                          activeTool === tool.tool
-                            ? "bg-primary text-white"
-                            : "bg-primary/10 text-primary"
-                        }`}
-                      >
-                        <span className="material-symbols-outlined">
-                          {tool.icon}
+                        <span className="material-symbols-outlined text-base">
+                          edit_note
                         </span>
-                      </div>
-                      <span
-                        className={`text-xs text-center ${
+                        <span>
+                          {showOCRPanel ? "OCR 패널 닫기" : "OCR 텍스트 편집"}
+                        </span>
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="h-px bg-border-light dark:border-border-dark"></div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      {
+                        icon: "edit",
+                        label: "텍스트 편집",
+                        tool: "text" as ToolType,
+                      },
+                      {
+                        icon: "add_photo_alternate",
+                        label: "이미지",
+                        tool: "image" as ToolType,
+                      },
+                      {
+                        icon: "signature",
+                        label: "서명",
+                        tool: "signature" as ToolType,
+                      },
+                      {
+                        icon: "draw",
+                        label: "그리기",
+                        tool: "draw" as ToolType,
+                      },
+                      {
+                        icon: "shapes",
+                        label: "도형",
+                        tool: "shape" as ToolType,
+                      },
+                      {
+                        icon: "sticky_note_2",
+                        label: "스티커",
+                        tool: "sticker" as ToolType,
+                      },
+                    ].map((tool) => (
+                      <button
+                        key={tool.icon}
+                        onClick={() => handleToolClick(tool.tool)}
+                        className={`flex flex-col items-center gap-1.5 p-2 rounded-lg transition-colors ${
                           activeTool === tool.tool
-                            ? "text-primary font-medium"
-                            : "text-text-secondary-light dark:text-text-secondary-dark"
+                            ? "bg-primary/20 dark:bg-primary/30"
+                            : "hover:bg-black/5 dark:hover:bg-white/10"
                         }`}
                       >
-                        {tool.label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                        <div
+                          className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+                            activeTool === tool.tool
+                              ? "bg-primary text-white"
+                              : "bg-primary/10 text-primary"
+                          }`}
+                        >
+                          <span className="material-symbols-outlined">
+                            {tool.icon}
+                          </span>
+                        </div>
+                        <span
+                          className={`text-xs text-center ${
+                            activeTool === tool.tool
+                              ? "text-primary font-medium"
+                              : "text-text-secondary-light dark:text-text-secondary-dark"
+                          }`}
+                        >
+                          {tool.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
 
-                <div className="h-px bg-border-light dark:bg-border-dark"></div>
+                  <div className="h-px bg-border-light dark:bg-border-dark"></div>
 
-                <div>
-                  <h3 className="font-medium mb-3 text-text-primary-light dark:text-text-primary-dark">
-                    텍스트 속성
-                  </h3>
-                  <div className="flex flex-col gap-4">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm text-text-primary-light dark:text-text-primary-dark">
-                        글꼴
-                      </label>
-                      <select className="w-40 rounded-md border border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark text-sm p-1.5 text-text-primary-light dark:text-text-primary-dark">
-                        <option>Noto Sans KR</option>
-                        <option>Inter</option>
-                        <option>Times New Roman</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm text-text-primary-light dark:text-text-primary-dark">
-                        크기
-                      </label>
-                      <input
-                        className="w-40 rounded-md border border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark text-sm p-1.5 text-text-primary-light dark:text-text-primary-dark"
-                        type="number"
-                        defaultValue="32"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm text-text-primary-light dark:text-text-primary-dark">
-                        색상
-                      </label>
-                      <div className="w-40 h-8 rounded-md border border-border-light dark:border-border-dark bg-black"></div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      {
+                        icon: "format_ink_highlighter",
+                        label: "하이라이트",
+                        tool: "highlight" as ToolType,
+                      },
+                      {
+                        icon: "select_all",
+                        label: "영역 선택",
+                        tool: "select" as ToolType,
+                      },
+                      {
+                        icon: "rotate_90_degrees_cw",
+                        label: "페이지 회전",
+                        tool: "rotate" as ToolType,
+                      },
+                      {
+                        icon: "account_tree",
+                        label: "구조 편집",
+                        tool: "structure" as ToolType,
+                      },
+                    ].map((tool) => (
+                      <button
+                        key={tool.icon}
+                        onClick={() => handleToolClick(tool.tool)}
+                        className={`flex flex-col items-center gap-1.5 p-2 rounded-lg transition-colors ${
+                          activeTool === tool.tool
+                            ? "bg-primary/20 dark:bg-primary/30"
+                            : "hover:bg-black/5 dark:hover:bg-white/10"
+                        }`}
+                      >
+                        <div
+                          className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+                            activeTool === tool.tool
+                              ? "bg-primary text-white"
+                              : "bg-primary/10 text-primary"
+                          }`}
+                        >
+                          <span className="material-symbols-outlined">
+                            {tool.icon}
+                          </span>
+                        </div>
+                        <span
+                          className={`text-xs text-center ${
+                            activeTool === tool.tool
+                              ? "text-primary font-medium"
+                              : "text-text-secondary-light dark:text-text-secondary-dark"
+                          }`}
+                        >
+                          {tool.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="h-px bg-border-light dark:bg-border-dark"></div>
+
+                  <div>
+                    <h3 className="font-medium mb-3 text-text-primary-light dark:text-text-primary-dark">
+                      텍스트 속성
+                    </h3>
+                    <div className="flex flex-col gap-4">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm text-text-primary-light dark:text-text-primary-dark">
+                          글꼴
+                        </label>
+                        <select className="w-40 rounded-md border border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark text-sm p-1.5 text-text-primary-light dark:text-text-primary-dark">
+                          <option>Noto Sans KR</option>
+                          <option>Inter</option>
+                          <option>Times New Roman</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm text-text-primary-light dark:text-text-primary-dark">
+                          크기
+                        </label>
+                        <input
+                          className="w-40 rounded-md border border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark text-sm p-1.5 text-text-primary-light dark:text-text-primary-dark"
+                          type="number"
+                          defaultValue="32"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm text-text-primary-light dark:text-text-primary-dark">
+                          색상
+                        </label>
+                        <div className="w-40 h-8 rounded-md border border-border-light dark:border-border-dark bg-black"></div>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* OCR Text Editing Panel */}
-                {showOCRPanel && hasOCRResults && (
-                  <>
-                    <div className="h-px bg-border-light dark:border-border-dark"></div>
-                    <div>
-                      <h3 className="font-medium mb-3 text-text-primary-light dark:text-text-primary-dark">
-                        OCR 텍스트 편집
-                      </h3>
-                      <div className="flex flex-col gap-2 max-h-96 overflow-y-auto">
-                        {ocrResults?.pages
-                          ?.find((p) => p.page_number === currentPage)
-                          ?.lines?.map((line, idx) => (
-                            <div
-                              key={idx}
-                              className="flex flex-col gap-1 p-2 rounded-md border border-border-light dark:border-border-dark hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
-                              onClick={() =>
-                                setSelectedLineIndex(
-                                  selectedLineIndex === idx ? null : idx,
-                                )
-                              }
-                            >
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">
-                                  Line {idx + 1}
-                                </span>
-                                <span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">
-                                  {((line.confidence || 0) * 100).toFixed(0)}%
-                                </span>
+                  {/* OCR Text Editing Panel */}
+                  {showOCRPanel && hasOCRResults && (
+                    <>
+                      <div className="h-px bg-border-light dark:border-border-dark"></div>
+                      <div>
+                        <h3 className="font-medium mb-3 text-text-primary-light dark:text-text-primary-dark">
+                          OCR 텍스트 편집
+                        </h3>
+                        <div className="flex flex-col gap-2 max-h-96 overflow-y-auto">
+                          {ocrResults?.pages
+                            ?.find((p) => p.page_number === currentPage)
+                            ?.lines?.map((line, idx) => (
+                              <div
+                                key={idx}
+                                className="flex flex-col gap-1 p-2 rounded-md border border-border-light dark:border-border-dark hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+                                onClick={() =>
+                                  setSelectedLineIndex(
+                                    selectedLineIndex === idx ? null : idx,
+                                  )
+                                }
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">
+                                    Line {idx + 1}
+                                  </span>
+                                  <span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">
+                                    {((line.confidence || 0) * 100).toFixed(0)}%
+                                  </span>
+                                </div>
+                                {selectedLineIndex === idx ? (
+                                  <input
+                                    type="text"
+                                    value={line.text}
+                                    onChange={(e) =>
+                                      handleEditOCRText(idx, e.target.value)
+                                    }
+                                    className="text-sm p-1 border rounded bg-white dark:bg-gray-800 border-border-light dark:border-border-dark text-text-primary-light dark:text-text-primary-dark"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                ) : (
+                                  <p className="text-sm truncate text-text-primary-light dark:text-text-primary-dark">
+                                    {line.text}
+                                  </p>
+                                )}
                               </div>
-                              {selectedLineIndex === idx ? (
-                                <input
-                                  type="text"
-                                  value={line.text}
-                                  onChange={(e) =>
-                                    handleEditOCRText(idx, e.target.value)
-                                  }
-                                  className="text-sm p-1 border rounded bg-white dark:bg-gray-800 border-border-light dark:border-border-dark text-text-primary-light dark:text-text-primary-dark"
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                              ) : (
-                                <p className="text-sm truncate text-text-primary-light dark:text-text-primary-dark">
-                                  {line.text}
-                                </p>
-                              )}
-                            </div>
-                          ))}
+                            ))}
+                        </div>
                       </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </aside>
+                    </>
+                  )}
+                </div>
+              </aside>
+            )}
           </div>
         </main>
       </div>
