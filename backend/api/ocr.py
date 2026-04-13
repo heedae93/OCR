@@ -974,10 +974,45 @@ def process_job_task(job_id: str):
             pages=ocr_results_all,
             layout_summary=layout_summary
         )
-
+        # OCR result JSON 저장
         ocr_json_path = Config.PROCESSED_DIR / f"{job_id}_ocr.json"
         with open(ocr_json_path, 'w', encoding='utf-8') as f:
             json.dump(ocr_result.dict(), f, ensure_ascii=False, indent=2)
+
+        # PII 추출(OCR 완료 직후 자동 실행)
+        try:
+            from core.pii_extractor import extract_pii_from_pages, mask_value
+
+            ocr_pages = ocr_result.dict()["pages"]
+
+            job_manager.update_job(job_id, message="개인정보 감지 중...")
+
+            # 라인별 bbox와 함께 PII 추출 (1차 정규식 → 2차 병합 → 3차 LLM 보조)
+            pii_boxes = extract_pii_from_pages(ocr_pages)
+
+            for box in pii_boxes:
+                box["masked_value"] = mask_value(box["type"], box["value"])
+
+            pii_items = [
+                {"type": b["type"], "value": b["value"], "masked_value": b["masked_value"]}
+                for b in pii_boxes
+            ]
+
+            pii_result = {
+                "job_id": job_id,
+                "pii_items": pii_items,
+                "masked_boxes": pii_boxes,
+            }
+            pii_json_path = Config.PROCESSED_DIR / f"{job_id}_pii.json"
+            with open(pii_json_path, 'w', encoding='utf-8') as f:
+                json.dump(pii_result, f, ensure_ascii=False, indent=2)
+
+            logger.info(f"[{job_id}] PII 추출 완료 : {len(pii_items)}개")
+
+        except Exception as e:
+            # PII 실패해도 OCR결과는 살림
+            logger.error(f"[{job_id}] PII 추출 실패 : {e}")
+
 
         # Update job as completed (add timestamp to prevent caching)
         timestamp = int(time.time() * 1000)
