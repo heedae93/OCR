@@ -2,10 +2,10 @@ import Sidebar from '@/components/Sidebar'
 
 export default function HelpPage() {
   return (
-    <div className="relative flex min-h-screen w-full bg-background-light dark:bg-background-dark">
+    <div className="bg-background-light dark:bg-background-dark min-h-screen">
       <Sidebar />
 
-      <main className="flex-1 p-6 lg:p-10">
+      <main className="flex-1 ml-64 p-6 lg:p-10">
         <div className="w-full max-w-7xl mx-auto">
           <div className="flex flex-wrap justify-between gap-4 mb-8">
             <div className="flex flex-col gap-2">

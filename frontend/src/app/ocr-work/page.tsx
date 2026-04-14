@@ -54,9 +54,9 @@ export default function OcrWorkPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('upload')
 
   return (
-    <div className="relative flex min-h-screen w-full bg-background-light dark:bg-background-dark">
+    <div className="bg-background-light dark:bg-background-dark min-h-screen">
       <Sidebar />
-      <main className="flex-1 flex flex-col p-6 lg:p-10 min-w-0">
+      <main className="flex-1 ml-64 flex flex-col p-6 lg:p-10 min-w-0">
         <div className="w-full max-w-7xl mx-auto flex flex-col flex-1">
 
           {/* Page Header */}
