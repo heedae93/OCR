@@ -3,6 +3,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { OCRResult } from '@/types'
 
+interface MaskedBox {
+  type: string
+  value: string
+  masked_value?: string
+  page: number | null
+  bbox: number[] | null
+}
+
 interface PDFViewerProps {
   pdfUrl: string
   currentPage: number
@@ -14,6 +22,8 @@ interface PDFViewerProps {
   showTextLayer?: boolean
   showOCRComparison?: boolean
   showAccuracy?: boolean
+  showMasking?: boolean
+  maskingData?: MaskedBox[]
   highlightedLineIndex?: number | null
   children?: React.ReactNode
   onPageDimensionsChange?: (width: number, height: number) => void
@@ -30,6 +40,8 @@ export default function PDFViewer({
   showTextLayer = false,
   showOCRComparison = false,
   showAccuracy = false,
+  showMasking = false,
+  maskingData = [],
   highlightedLineIndex = null,
   children,
   onPageDimensionsChange
@@ -312,11 +324,11 @@ export default function PDFViewer({
 
             {/* Content skeleton lines */}
             <div className="space-y-3 mt-8">
-              {[...Array(12)].map((_, i) => (
+              {[95, 80, 100, 75, 90, 85, 70, 95, 78, 88, 72, 83].map((w, i) => (
                 <div
                   key={i}
                   className="h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"
-                  style={{ width: `${70 + Math.random() * 30}%`, animationDelay: `${i * 0.1}s` }}
+                  style={{ width: `${w}%`, animationDelay: `${i * 0.1}s` }}
                 />
               ))}
             </div>
@@ -546,6 +558,59 @@ export default function PDFViewer({
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* Masking Overlay — 원본 텍스트 위치에 마스킹 텍스트를 자연스럽게 덮어씌움 */}
+        {showMasking && maskingData && maskingData.length > 0 && (
+          <div
+            className="absolute top-0 left-0 pointer-events-none"
+            style={{ width: `${pageWidth}px`, height: `${pageHeight}px` }}
+          >
+            {maskingData
+              .filter(box => box.page === currentPage && box.bbox && box.bbox.length === 4)
+              .map((box, idx) => {
+                const [x1, y1, x2, y2] = box.bbox!
+                const boxW = (x2 - x1) * scaleX
+                const boxH = (y2 - y1) * scaleY
+                const displayText = box.masked_value || '***'
+                // 박스 높이의 65%를 폰트 크기로, 박스 너비 초과 시 줄여서 맞춤
+                const fontSize = Math.max(8, boxH * 0.65)
+                // OCR bbox 오차로 첫 글자 노출 방지: 왼쪽으로 여유 확보
+                const leftPad = Math.max(4, boxH * 0.5)
+                return (
+                  <div
+                    key={idx}
+                    className="absolute overflow-hidden"
+                    style={{
+                      left: `${Math.max(0, x1 * scaleX - leftPad)}px`,
+                      top: `${y1 * scaleY}px`,
+                      width: `${boxW + leftPad}px`,
+                      height: `${boxH}px`,
+                      // 흰 배경으로 원본 텍스트(스캔 이미지)를 가림 — 박스처럼 보이지 않도록 border 없음
+                      backgroundColor: 'white',
+                      zIndex: 50,
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    title={`[${box.type}] ${box.value}`}
+                  >
+                    <span
+                      style={{
+                        fontSize: `${fontSize}px`,
+                        lineHeight: 1,
+                        color: '#111827',
+                        fontFamily: '"Malgun Gothic", "Apple SD Gothic Neo", sans-serif',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        letterSpacing: '0.02em',
+                      }}
+                    >
+                      {displayText}
+                    </span>
+                  </div>
+                )
+              })}
           </div>
         )}
 

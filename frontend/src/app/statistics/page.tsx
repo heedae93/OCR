@@ -19,27 +19,73 @@ interface Trend {
   failed: number[]
 }
 
+interface AccuracyDist {
+  total: number
+  high: number; mid: number; low: number
+  high_pct: number; mid_pct: number; low_pct: number
+}
+
+interface FileTypeDist {
+  total: number
+  counts: { [key: string]: number }
+}
+
+interface ProcessingTimeDist {
+  total: number
+  fast: number; normal: number; slow: number
+  fast_pct: number; normal_pct: number; slow_pct: number
+}
+
+interface MonthlyPages {
+  labels: string[]
+  monthly: number[]
+  cumulative: number[]
+}
+
+interface SessionStat {
+  session_id: string
+  session_name: string
+  total: number
+  completed: number
+  failed: number
+  completion_rate: number
+  last_activity: string | null
+}
+
 type Period = 'daily' | 'weekly' | 'monthly'
 
 export default function StatisticsPage() {
   const [summary, setSummary] = useState<Summary | null>(null)
   const [trend, setTrend] = useState<Trend | null>(null)
   const [period, setPeriod] = useState<Period>('daily')
+  const [accuracy, setAccuracy] = useState<AccuracyDist | null>(null)
+  const [fileTypes, setFileTypes] = useState<FileTypeDist | null>(null)
+  const [procTime, setProcTime] = useState<ProcessingTimeDist | null>(null)
+  const [monthlyPages, setMonthlyPages] = useState<MonthlyPages | null>(null)
+  const [sessions, setSessions] = useState<SessionStat[]>([])
   const [loading, setLoading] = useState(true)
 
   const getUserId = () => {
-    try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}')
-      return user.user_id || ''
-    } catch { return '' }
+    try { return JSON.parse(localStorage.getItem('user') || '{}').user_id || '' } catch { return '' }
   }
 
   useEffect(() => {
     const userId = getUserId()
+    const base = `${API_BASE_URL}/api/jobs/statistics`
     Promise.all([
-      fetch(`${API_BASE_URL}/api/jobs/statistics/summary?user_id=${userId}`).then(r => r.json()),
-    ]).then(([s]) => {
+      fetch(`${base}/summary?user_id=${userId}`).then(r => r.json()),
+      fetch(`${base}/accuracy?user_id=${userId}`).then(r => r.json()),
+      fetch(`${base}/file-types?user_id=${userId}`).then(r => r.json()),
+      fetch(`${base}/processing-time?user_id=${userId}`).then(r => r.json()),
+      fetch(`${base}/monthly-pages?user_id=${userId}`).then(r => r.json()),
+      fetch(`${base}/sessions?user_id=${userId}`).then(r => r.json()),
+    ]).then(([s, acc, ft, pt, mp, sess]) => {
       setSummary(s)
+      setAccuracy(acc)
+      setFileTypes(ft)
+      setProcTime(pt)
+      setMonthlyPages(mp)
+      setSessions(sess)
       setLoading(false)
     })
   }, [])
@@ -47,14 +93,18 @@ export default function StatisticsPage() {
   useEffect(() => {
     const userId = getUserId()
     fetch(`${API_BASE_URL}/api/jobs/statistics/trend?user_id=${userId}&period=${period}`)
-      .then(r => r.json())
-      .then(setTrend)
+      .then(r => r.json()).then(setTrend)
   }, [period])
 
   const formatDuration = (s: number) => {
     if (!s) return '-'
     if (s < 60) return `${s.toFixed(1)}초`
     return `${Math.floor(s / 60)}분 ${Math.floor(s % 60)}초`
+  }
+
+  const formatDate = (s: string | null) => {
+    if (!s) return '-'
+    return new Date(s).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' })
   }
 
   const maxVal = trend ? Math.max(...trend.completed, ...trend.failed, 1) : 1
@@ -70,6 +120,19 @@ export default function StatisticsPage() {
     { label: '사용 용량', value: `${summary.storage_used_mb} MB`, icon: 'storage', color: 'text-teal-500' },
   ] : []
 
+  // File type colors
+  const ftColors: Record<string, string> = {
+    pdf: 'bg-red-400', png: 'bg-blue-400', jpg: 'bg-blue-400', jpeg: 'bg-blue-400',
+    tiff: 'bg-purple-400', unknown: 'bg-gray-400'
+  }
+  const ftLabels: Record<string, string> = {
+    pdf: 'PDF', png: 'PNG', jpg: 'JPG', jpeg: 'JPG', tiff: 'TIFF', unknown: '기타'
+  }
+
+  const maxMonthly = monthlyPages ? Math.max(...monthlyPages.monthly, 1) : 1
+  const maxCumul = monthlyPages ? Math.max(...monthlyPages.cumulative, 1) : 1
+  const LINE_H = 120
+
   return (
     <div className="bg-background-light dark:bg-background-dark min-h-screen">
       <Sidebar />
@@ -83,116 +146,284 @@ export default function StatisticsPage() {
               <span className="material-symbols-outlined animate-spin text-primary text-4xl">progress_activity</span>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-              {summaryCards.map(({ label, value, icon, color }) => (
-                <div key={label} className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-4 flex flex-col gap-2">
-                  <span className={`material-symbols-outlined ${color}`}>{icon}</span>
-                  <div className="text-xl font-bold text-text-primary-light dark:text-text-primary-dark">{value}</div>
-                  <div className="text-xs text-text-secondary-light dark:text-text-secondary-dark">{label}</div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Trend Chart */}
-          <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-text-primary-light dark:text-text-primary-dark">처리량 추이</h2>
-              <div className="flex gap-1 bg-background-light dark:bg-background-dark rounded-lg p-1">
-                {(['daily', 'weekly', 'monthly'] as Period[]).map(p => (
-                  <button
-                    key={p}
-                    onClick={() => setPeriod(p)}
-                    className={`px-3 py-1.5 text-sm rounded-md transition-all ${
-                      period === p
-                        ? 'bg-primary text-white font-semibold'
-                        : 'text-text-secondary-light dark:text-text-secondary-dark hover:text-text-primary-light dark:hover:text-text-primary-dark'
-                    }`}
-                  >
-                    {p === 'daily' ? '일별' : p === 'weekly' ? '주별' : '월별'}
-                  </button>
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                {summaryCards.map(({ label, value, icon, color }) => (
+                  <div key={label} className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-4 flex flex-col gap-2">
+                    <span className={`material-symbols-outlined ${color}`}>{icon}</span>
+                    <div className="text-xl font-bold text-text-primary-light dark:text-text-primary-dark">{value}</div>
+                    <div className="text-xs text-text-secondary-light dark:text-text-secondary-dark">{label}</div>
+                  </div>
                 ))}
               </div>
-            </div>
 
-            {/* Legend */}
-            <div className="flex gap-4 mb-4">
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm bg-primary" />
-                <span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">완료</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm bg-red-400" />
-                <span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">실패</span>
-              </div>
-            </div>
-
-            {/* Bar Chart */}
-            {trend ? (
-              <div className="overflow-x-auto">
-                <div style={{ minWidth: trend.labels.length * 52 }}>
-                  {/* Y-axis guide lines */}
-                  <div className="relative" style={{ height: BAR_HEIGHT + 24 }}>
-                    {[0, 0.25, 0.5, 0.75, 1].map(ratio => (
-                      <div
-                        key={ratio}
-                        className="absolute left-0 right-0 border-t border-border-light dark:border-border-dark"
-                        style={{ bottom: ratio * BAR_HEIGHT + 24 }}
-                      >
-                        <span className="absolute -top-2.5 -left-1 text-xs text-text-secondary-light dark:text-text-secondary-dark pr-1" style={{ fontSize: 10 }}>
-                          {ratio === 0 ? '' : Math.round(maxVal * ratio)}
-                        </span>
-                      </div>
+              {/* Row: Trend chart */}
+              <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg font-semibold text-text-primary-light dark:text-text-primary-dark">처리량 추이</h2>
+                  <div className="flex gap-1 bg-background-light dark:bg-background-dark rounded-lg p-1">
+                    {(['daily', 'weekly', 'monthly'] as Period[]).map(p => (
+                      <button key={p} onClick={() => setPeriod(p)}
+                        className={`px-3 py-1.5 text-sm rounded-md transition-all ${
+                          period === p ? 'bg-primary text-white font-semibold'
+                            : 'text-text-secondary-light dark:text-text-secondary-dark hover:text-text-primary-light dark:hover:text-text-primary-dark'
+                        }`}>
+                        {p === 'daily' ? '일별' : p === 'weekly' ? '주별' : '월별'}
+                      </button>
                     ))}
-
-                    {/* Bars */}
-                    <div className="absolute bottom-6 left-6 right-0 flex items-end gap-1" style={{ height: BAR_HEIGHT }}>
-                      {trend.labels.map((_label, i) => {
-                        const ch = Math.round((trend.completed[i] / maxVal) * BAR_HEIGHT)
-                        const fh = Math.round((trend.failed[i] / maxVal) * BAR_HEIGHT)
-                        return (
-                          <div key={i} className="flex-1 flex flex-col items-center gap-0.5 group relative">
-                            {/* Tooltip */}
-                            <div className="absolute bottom-full mb-1 hidden group-hover:flex flex-col items-center z-10">
-                              <div className="bg-gray-800 dark:bg-gray-700 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
-                                완료 {trend.completed[i]} / 실패 {trend.failed[i]}
+                  </div>
+                </div>
+                <div className="flex gap-4 mb-4">
+                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-primary" /><span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">완료</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-red-400" /><span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">실패</span></div>
+                </div>
+                {trend ? (
+                  <div className="overflow-x-auto">
+                    <div style={{ minWidth: trend.labels.length * 52 }}>
+                      <div className="relative" style={{ height: BAR_HEIGHT + 24 }}>
+                        {[0, 0.25, 0.5, 0.75, 1].map(ratio => (
+                          <div key={ratio} className="absolute left-0 right-0 border-t border-border-light dark:border-border-dark" style={{ bottom: ratio * BAR_HEIGHT + 24 }}>
+                            <span className="absolute -top-2.5 -left-1 text-text-secondary-light dark:text-text-secondary-dark pr-1" style={{ fontSize: 10 }}>
+                              {ratio === 0 ? '' : Math.round(maxVal * ratio)}
+                            </span>
+                          </div>
+                        ))}
+                        <div className="absolute bottom-6 left-6 right-0 flex items-end gap-1" style={{ height: BAR_HEIGHT }}>
+                          {trend.labels.map((_label, i) => {
+                            const ch = Math.round((trend.completed[i] / maxVal) * BAR_HEIGHT)
+                            const fh = Math.round((trend.failed[i] / maxVal) * BAR_HEIGHT)
+                            return (
+                              <div key={i} className="flex-1 flex flex-col items-center gap-0.5 group relative">
+                                <div className="absolute bottom-full mb-1 hidden group-hover:flex flex-col items-center z-10">
+                                  <div className="bg-gray-800 dark:bg-gray-700 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
+                                    완료 {trend.completed[i]} / 실패 {trend.failed[i]}
+                                  </div>
+                                  <div className="w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800 dark:border-t-gray-700" />
+                                </div>
+                                <div className="w-full flex items-end gap-0.5" style={{ height: BAR_HEIGHT }}>
+                                  <div className="flex-1 bg-primary/80 hover:bg-primary rounded-t transition-all duration-300" style={{ height: ch || 1 }} />
+                                  <div className="flex-1 bg-red-400/80 hover:bg-red-400 rounded-t transition-all duration-300" style={{ height: fh || (trend.failed[i] > 0 ? 1 : 0) }} />
+                                </div>
                               </div>
-                              <div className="w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800 dark:border-t-gray-700" />
+                            )
+                          })}
+                        </div>
+                        <div className="absolute bottom-0 left-6 right-0 flex gap-1" style={{ height: 20 }}>
+                          {trend.labels.map((label, i) => (
+                            <div key={i} className="flex-1 text-center overflow-hidden" style={{ fontSize: 9 }}>
+                              <span className="text-text-secondary-light dark:text-text-secondary-dark truncate block">{label}</span>
                             </div>
-                            <div className="w-full flex items-end gap-0.5" style={{ height: BAR_HEIGHT }}>
-                              <div
-                                className="flex-1 bg-primary/80 hover:bg-primary rounded-t transition-all duration-300"
-                                style={{ height: ch || 1 }}
-                              />
-                              <div
-                                className="flex-1 bg-red-400/80 hover:bg-red-400 rounded-t transition-all duration-300"
-                                style={{ height: fh || (trend.failed[i] > 0 ? 1 : 0) }}
-                              />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center" style={{ height: BAR_HEIGHT }}>
+                    <span className="material-symbols-outlined animate-spin text-primary text-3xl">progress_activity</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Row: Accuracy + File Types + Processing Time */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                {/* OCR 정확도 분포 */}
+                <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-6 flex flex-col gap-4">
+                  <h2 className="text-base font-semibold text-text-primary-light dark:text-text-primary-dark">OCR 정확도 분포</h2>
+                  {accuracy && accuracy.total > 0 ? (
+                    <div className="flex flex-col gap-3">
+                      {[
+                        { label: '우수 (90%+)', pct: accuracy.high_pct, count: accuracy.high, color: 'bg-green-500' },
+                        { label: '보통 (70~90%)', pct: accuracy.mid_pct, count: accuracy.mid, color: 'bg-yellow-400' },
+                        { label: '미흡 (70% 미만)', pct: accuracy.low_pct, count: accuracy.low, color: 'bg-red-400' },
+                      ].map(({ label, pct, count, color }) => (
+                        <div key={label} className="flex flex-col gap-1">
+                          <div className="flex justify-between text-xs text-text-secondary-light dark:text-text-secondary-dark">
+                            <span>{label}</span>
+                            <span>{count}건 ({pct}%)</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
+                            <div className={`h-full rounded-full ${color} transition-all duration-500`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                      <div className="text-xs text-text-secondary-light dark:text-text-secondary-dark mt-1">총 {accuracy.total}건</div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-text-secondary-light dark:text-text-secondary-dark">데이터 없음</div>
+                  )}
+                </div>
+
+                {/* 파일 유형별 현황 */}
+                <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-6 flex flex-col gap-4">
+                  <h2 className="text-base font-semibold text-text-primary-light dark:text-text-primary-dark">파일 유형별 현황</h2>
+                  {fileTypes && fileTypes.total > 0 ? (
+                    <div className="flex flex-col gap-3">
+                      {Object.entries(fileTypes.counts).map(([ft, cnt]) => {
+                        const pct = fileTypes.total > 0 ? Math.round(cnt / fileTypes.total * 100) : 0
+                        const color = ftColors[ft] || 'bg-gray-400'
+                        const label = ftLabels[ft] || ft.toUpperCase()
+                        return (
+                          <div key={ft} className="flex flex-col gap-1">
+                            <div className="flex justify-between text-xs text-text-secondary-light dark:text-text-secondary-dark">
+                              <span>{label}</span>
+                              <span>{cnt}건 ({pct}%)</span>
+                            </div>
+                            <div className="h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
+                              <div className={`h-full rounded-full ${color} transition-all duration-500`} style={{ width: `${pct}%` }} />
                             </div>
                           </div>
                         )
                       })}
+                      <div className="text-xs text-text-secondary-light dark:text-text-secondary-dark mt-1">총 {fileTypes.total}건</div>
                     </div>
+                  ) : (
+                    <div className="text-sm text-text-secondary-light dark:text-text-secondary-dark">데이터 없음</div>
+                  )}
+                </div>
 
-                    {/* X labels */}
-                    <div className="absolute bottom-0 left-6 right-0 flex gap-1" style={{ height: 20 }}>
-                      {trend.labels.map((label, i) => (
-                        <div key={i} className="flex-1 text-center overflow-hidden" style={{ fontSize: 9 }}>
-                          <span className="text-text-secondary-light dark:text-text-secondary-dark truncate block">
-                            {label}
-                          </span>
+                {/* 처리 시간 분포 */}
+                <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-6 flex flex-col gap-4">
+                  <h2 className="text-base font-semibold text-text-primary-light dark:text-text-primary-dark">처리 시간 분포</h2>
+                  {procTime && procTime.total > 0 ? (
+                    <div className="flex flex-col gap-3">
+                      {[
+                        { label: '빠름 (30초 미만)', pct: procTime.fast_pct, count: procTime.fast, color: 'bg-green-500' },
+                        { label: '보통 (30초~2분)', pct: procTime.normal_pct, count: procTime.normal, color: 'bg-blue-400' },
+                        { label: '느림 (2분 이상)', pct: procTime.slow_pct, count: procTime.slow, color: 'bg-orange-400' },
+                      ].map(({ label, pct, count, color }) => (
+                        <div key={label} className="flex flex-col gap-1">
+                          <div className="flex justify-between text-xs text-text-secondary-light dark:text-text-secondary-dark">
+                            <span>{label}</span>
+                            <span>{count}건 ({pct}%)</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
+                            <div className={`h-full rounded-full ${color} transition-all duration-500`} style={{ width: `${pct}%` }} />
+                          </div>
                         </div>
                       ))}
+                      <div className="text-xs text-text-secondary-light dark:text-text-secondary-dark mt-1">총 {procTime.total}건</div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="text-sm text-text-secondary-light dark:text-text-secondary-dark">데이터 없음</div>
+                  )}
                 </div>
               </div>
-            ) : (
-              <div className="flex items-center justify-center" style={{ height: BAR_HEIGHT }}>
-                <span className="material-symbols-outlined animate-spin text-primary text-3xl">progress_activity</span>
+
+              {/* 월별 누적 처리량 */}
+              <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg font-semibold text-text-primary-light dark:text-text-primary-dark">월별 누적 처리량</h2>
+                  <div className="flex gap-4">
+                    <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-primary/60" /><span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">월 처리량</span></div>
+                    <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-primary" /><span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">누적</span></div>
+                  </div>
+                </div>
+                {monthlyPages && monthlyPages.labels.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <div style={{ minWidth: monthlyPages.labels.length * 60 }}>
+                      <div className="relative" style={{ height: LINE_H + 30 }}>
+                        {/* Monthly bars */}
+                        <div className="absolute bottom-6 left-0 right-0 flex items-end gap-2" style={{ height: LINE_H }}>
+                          {monthlyPages.labels.map((label, i) => {
+                            const bh = Math.round((monthlyPages.monthly[i] / maxMonthly) * LINE_H)
+                            return (
+                              <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative">
+                                <div className="absolute bottom-full mb-1 hidden group-hover:flex flex-col items-center z-10">
+                                  <div className="bg-gray-800 dark:bg-gray-700 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
+                                    {label}: {monthlyPages.monthly[i]}p (누적 {monthlyPages.cumulative[i]}p)
+                                  </div>
+                                  <div className="w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800 dark:border-t-gray-700" />
+                                </div>
+                                <div className="w-full" style={{ height: LINE_H }}>
+                                  <div className="w-full bg-primary/50 hover:bg-primary/70 rounded-t transition-all duration-300 absolute bottom-0" style={{ height: bh || 1 }} />
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+
+                        {/* Cumulative line (SVG overlay) */}
+                        <svg className="absolute bottom-6 left-0 right-0 pointer-events-none" style={{ height: LINE_H, width: '100%' }}>
+                          <polyline
+                            fill="none"
+                            stroke="var(--color-primary, #6366f1)"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            points={monthlyPages.cumulative.map((v, i) => {
+                              const x = (i + 0.5) / monthlyPages.labels.length * 100
+                              const y = (1 - v / maxCumul) * LINE_H
+                              return `${x}%,${y}`
+                            }).join(' ')}
+                          />
+                          {monthlyPages.cumulative.map((v, i) => {
+                            const x = (i + 0.5) / monthlyPages.labels.length * 100
+                            const y = (1 - v / maxCumul) * LINE_H
+                            return <circle key={i} cx={`${x}%`} cy={y} r="3" fill="var(--color-primary, #6366f1)" />
+                          })}
+                        </svg>
+
+                        {/* X labels */}
+                        <div className="absolute bottom-0 left-0 right-0 flex gap-2" style={{ height: 20 }}>
+                          {monthlyPages.labels.map((label, i) => (
+                            <div key={i} className="flex-1 text-center" style={{ fontSize: 10 }}>
+                              <span className="text-text-secondary-light dark:text-text-secondary-dark">{label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-text-secondary-light dark:text-text-secondary-dark">데이터 없음</div>
+                )}
               </div>
-            )}
-          </div>
+
+              {/* 세션별 작업 현황 */}
+              <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark overflow-hidden">
+                <div className="px-6 py-4 border-b border-border-light dark:border-border-dark">
+                  <h2 className="text-lg font-semibold text-text-primary-light dark:text-text-primary-dark">세션별 작업 현황</h2>
+                </div>
+                {sessions.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-background-light dark:bg-background-dark">
+                        <tr>
+                          {['세션명', '총 문서', '완료', '실패', '완료율', '마지막 작업'].map(h => (
+                            <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-text-secondary-light dark:text-text-secondary-dark uppercase tracking-wider">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border-light dark:divide-border-dark">
+                        {sessions.map(s => (
+                          <tr key={s.session_id} className="hover:bg-background-light dark:hover:bg-background-dark transition-colors">
+                            <td className="px-5 py-3 text-sm font-medium text-text-primary-light dark:text-text-primary-dark">{s.session_name}</td>
+                            <td className="px-5 py-3 text-sm text-text-secondary-light dark:text-text-secondary-dark">{s.total}</td>
+                            <td className="px-5 py-3 text-sm text-green-600 dark:text-green-400 font-medium">{s.completed}</td>
+                            <td className="px-5 py-3 text-sm text-red-500 dark:text-red-400 font-medium">{s.failed}</td>
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden min-w-[60px]">
+                                  <div className="h-full rounded-full bg-green-500 transition-all duration-500" style={{ width: `${s.completion_rate}%` }} />
+                                </div>
+                                <span className="text-xs text-text-secondary-light dark:text-text-secondary-dark whitespace-nowrap">{s.completion_rate}%</span>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3 text-sm text-text-secondary-light dark:text-text-secondary-dark whitespace-nowrap">{formatDate(s.last_activity)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-16 text-center text-text-secondary-light dark:text-text-secondary-dark">세션 데이터 없음</div>
+                )}
+              </div>
+
+            </>
+          )}
         </div>
       </main>
     </div>

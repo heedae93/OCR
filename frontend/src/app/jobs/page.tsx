@@ -300,10 +300,20 @@ export default function JobsPage() {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
                                 {job.status === 'completed' && job.pdf_url && (
-                                  <a href={`${API_BASE_URL}${job.pdf_url}`} download
+                                  <button
+                                    onClick={async () => {
+                                      const url = `${API_BASE_URL}${job.pdf_url}`
+                                      const res = await fetch(url)
+                                      const blob = await res.blob()
+                                      const a = document.createElement('a')
+                                      a.href = window.URL.createObjectURL(blob)
+                                      a.download = job.filename || `${job.job_id}.pdf`
+                                      a.click()
+                                      window.URL.revokeObjectURL(a.href)
+                                    }}
                                     className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
                                     다운로드
-                                  </a>
+                                  </button>
                                 )}
                                 <button onClick={() => handleDelete(job.job_id)}
                                   className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">

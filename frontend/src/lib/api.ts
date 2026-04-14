@@ -85,7 +85,9 @@ export interface ExportResponse {
 }
 
 export const exportDocument = async (jobId: string, payload: ExportPayload): Promise<ExportResponse> => {
-  const response = await api.post(`/export/${jobId}`, payload)
+  let userId = ''
+  try { userId = JSON.parse(localStorage.getItem('user') || '{}').user_id || '' } catch {}
+  const response = await api.post(`/export/${jobId}?user_id=${userId}`, payload)
   return response.data
 }
 

@@ -29,6 +29,7 @@ from core.reading_order_sorter import ReadingOrderSorter
 from utils.job_manager import JobManager
 from utils.file_utils import save_uploaded_file, generate_unique_id, cleanup_temp_files
 from utils.smart_layers import apply_smart_layers_to_image
+from database import SessionLocal, Job as DBJob, DownloadHistory, FileVersion
 
 # Import pdf_gen pipeline components
 from core.pdf_gen_pipeline import CustomOCRModel, OCRPDFGenerator
@@ -976,10 +977,45 @@ def process_job_task(job_id: str):
             pages=ocr_results_all,
             layout_summary=layout_summary
         )
-
+        # OCR result JSON 저장
         ocr_json_path = Config.PROCESSED_DIR / f"{job_id}_ocr.json"
         with open(ocr_json_path, 'w', encoding='utf-8') as f:
             json.dump(ocr_result.dict(), f, ensure_ascii=False, indent=2)
+
+        # PII 추출(OCR 완료 직후 자동 실행)
+        try:
+            from core.pii_extractor import extract_pii_from_pages, mask_value
+
+            ocr_pages = ocr_result.dict()["pages"]
+
+            job_manager.update_job(job_id, message="개인정보 감지 중...")
+
+            # 라인별 bbox와 함께 PII 추출 (1차 정규식 → 2차 병합 → 3차 LLM 보조)
+            pii_boxes = extract_pii_from_pages(ocr_pages)
+
+            for box in pii_boxes:
+                box["masked_value"] = mask_value(box["type"], box["value"])
+
+            pii_items = [
+                {"type": b["type"], "value": b["value"], "masked_value": b["masked_value"]}
+                for b in pii_boxes
+            ]
+
+            pii_result = {
+                "job_id": job_id,
+                "pii_items": pii_items,
+                "masked_boxes": pii_boxes,
+            }
+            pii_json_path = Config.PROCESSED_DIR / f"{job_id}_pii.json"
+            with open(pii_json_path, 'w', encoding='utf-8') as f:
+                json.dump(pii_result, f, ensure_ascii=False, indent=2)
+
+            logger.info(f"[{job_id}] PII 추출 완료 : {len(pii_items)}개")
+
+        except Exception as e:
+            # PII 실패해도 OCR결과는 살림
+            logger.error(f"[{job_id}] PII 추출 실패 : {e}")
+
 
         # Update job as completed (add timestamp to prevent caching)
         timestamp = int(time.time() * 1000)
@@ -1044,11 +1080,23 @@ def _convert_page_lines_to_raw(page: Optional[OCRPage]) -> list:
 
 
 @router.post("/export/{job_id}")
-async def export_with_smart_tools(job_id: str, payload: PDFExportRequest):
+async def export_with_smart_tools(job_id: str, payload: PDFExportRequest, user_id: str = ""):
     """Apply Smart Tool edits and regenerate the final PDF."""
     job = job_manager.get_job(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        # job_manager는 메모리 기반이라 재시작 후 사라짐 → DB에서 fallback 조회
+        try:
+            db = SessionLocal()
+            db_job = db.query(DBJob).filter_by(job_id=job_id).first()
+            db.close()
+            if db_job:
+                job = {"job_id": job_id, "status": db_job.status, "original_filename": db_job.original_filename}
+            else:
+                raise HTTPException(status_code=404, detail="Job not found")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=404, detail="Job not found")
 
     if payload.ocr_results.job_id != job_id:
         logger.warning("Payload job_id mismatch detected. Overriding with server job_id.")
@@ -1189,6 +1237,34 @@ async def export_with_smart_tools(job_id: str, payload: PDFExportRequest):
         json_url = f"/api/download-json/{job_id}?v={timestamp}"
 
         job_manager.update_job(job_id, pdf_url=pdf_url)
+
+        # 다운로드 이력 기록 + 버전 자동 생성
+        if user_id:
+            try:
+                db = SessionLocal()
+                # 다운로드 이력
+                record = DownloadHistory(job_id=job_id, user_id=user_id, file_type="pdf")
+                db.add(record)
+
+                # 버전 자동 생성
+                last = db.query(FileVersion).filter_by(job_id=job_id).order_by(FileVersion.version_number.desc()).first()
+                next_num = (last.version_number + 1) if last else 1
+                db_job = db.query(DBJob).filter_by(job_id=job_id).first()
+                version = FileVersion(
+                    job_id=job_id,
+                    user_id=user_id,
+                    version_number=next_num,
+                    version_label=f"v{next_num}.0",
+                    note="내보내기 시 자동 생성",
+                    pdf_file_path=str(final_pdf_path),
+                    ocr_json_path=str(updated_json_path),
+                    file_size_bytes=final_pdf_path.stat().st_size if final_pdf_path.exists() else None,
+                )
+                db.add(version)
+                db.commit()
+                db.close()
+            except Exception as e:
+                logger.warning(f"Failed to record download/version: {e}")
 
         return {
             "message": "Export completed",

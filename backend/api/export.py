@@ -11,13 +11,14 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 from xml.dom import minidom
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from config import Config
 from utils.job_manager import JobManager
 from core.ctc_char_confidence import HeuristicCharConfidenceEstimator
+from database import SessionLocal, DownloadHistory, FileVersion, Job as DBJob
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,35 @@ char_confidence_estimator = HeuristicCharConfidenceEstimator()
 router = APIRouter(prefix="/api/export", tags=["export"])
 
 job_manager = JobManager()
+
+
+def record_download(job_id: str, user_id: str, file_type: str, ip: Optional[str] = None):
+    """다운로드 이력 기록 + 버전 자동 생성"""
+    try:
+        db = SessionLocal()
+
+        # 다운로드 이력
+        record = DownloadHistory(job_id=job_id, user_id=user_id, file_type=file_type, ip_address=ip)
+        db.add(record)
+
+        # 버전 자동 생성
+        last = db.query(FileVersion).filter_by(job_id=job_id).order_by(FileVersion.version_number.desc()).first()
+        next_num = (last.version_number + 1) if last else 1
+        db_job = db.query(DBJob).filter_by(job_id=job_id).first()
+        version = FileVersion(
+            job_id=job_id,
+            user_id=user_id,
+            version_number=next_num,
+            version_label=f"v{next_num}.0",
+            note=f"{file_type.upper()} 내보내기 시 자동 생성",
+            file_size_bytes=db_job.file_size_bytes if db_job else None,
+        )
+        db.add(version)
+
+        db.commit()
+        db.close()
+    except Exception as e:
+        logger.warning(f"Failed to record download: {e}")
 
 
 def get_ocr_results(job_id: str) -> Optional[Dict]:
@@ -43,7 +73,7 @@ def get_ocr_results(job_id: str) -> Optional[Dict]:
 # ============================================================
 
 @router.get("/{job_id}/txt")
-async def export_txt(job_id: str, include_page_numbers: bool = True):
+async def export_txt(job_id: str, include_page_numbers: bool = True, user_id: str = "", request: Request = None):
     """Export OCR results as plain text file"""
     ocr_data = get_ocr_results(job_id)
     if not ocr_data:
@@ -76,6 +106,8 @@ async def export_txt(job_id: str, include_page_numbers: bool = True):
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(content)
 
+    if user_id:
+        record_download(job_id, user_id, "txt", request.client.host if request and request.client else None)
     return FileResponse(
         path=str(output_path),
         filename=f"{job_id}.txt",
@@ -244,7 +276,7 @@ def create_abbyy_xml(ocr_data: Dict, job_id: str) -> str:
 
 
 @router.get("/{job_id}/xml")
-async def export_xml(job_id: str):
+async def export_xml(job_id: str, user_id: str = "", request: Request = None):
     """Export OCR results as ABBYY-compatible XML file"""
     ocr_data = get_ocr_results(job_id)
     if not ocr_data:
@@ -257,6 +289,8 @@ async def export_xml(job_id: str):
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(xml_content)
 
+    if user_id:
+        record_download(job_id, user_id, "xml", request.client.host if request and request.client else None)
     return FileResponse(
         path=str(output_path),
         filename=f"{job_id}.xml",
@@ -372,7 +406,7 @@ async def export_statistics(job_id: str):
 
 
 @router.get("/{job_id}/excel")
-async def export_excel(job_id: str):
+async def export_excel(job_id: str, user_id: str = "", request: Request = None):
     """Export recognition statistics as Excel file"""
     try:
         import openpyxl
@@ -537,6 +571,8 @@ async def export_excel(job_id: str):
     output_path = Config.PROCESSED_DIR / f"{job_id}_statistics.xlsx"
     wb.save(str(output_path))
 
+    if user_id:
+        record_download(job_id, user_id, "excel", request.client.host if request and request.client else None)
     return FileResponse(
         path=str(output_path),
         filename=f"{job_id}_statistics.xlsx",
@@ -554,7 +590,7 @@ class MultiFormatRequest(BaseModel):
 
 
 @router.post("/{job_id}/multi")
-async def export_multi_format(job_id: str, request: MultiFormatRequest):
+async def export_multi_format(job_id: str, request: MultiFormatRequest, user_id: str = "", http_request: Request = None):
     """Export selected formats as ZIP file"""
     import zipfile
     import io
@@ -647,6 +683,9 @@ async def export_multi_format(job_id: str, request: MultiFormatRequest):
                 logger.warning(f"Failed to add {fmt} to export: {e}")
 
     zip_buffer.seek(0)
+
+    if user_id:
+        record_download(job_id, user_id, "zip", http_request.client.host if http_request and http_request.client else None)
 
     return Response(
         content=zip_buffer.getvalue(),
