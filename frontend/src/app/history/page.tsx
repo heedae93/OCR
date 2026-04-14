@@ -134,9 +134,9 @@ export default function HistoryPage() {
   )
 
   return (
-    <div className="relative flex min-h-screen w-full bg-background-light dark:bg-background-dark">
+    <div className="bg-background-light dark:bg-background-dark min-h-screen">
       <Sidebar />
-      <main className="flex-1 p-6 lg:p-10 overflow-auto">
+      <main className="ml-64 p-6 lg:p-10">
         <div className="w-full max-w-6xl mx-auto flex flex-col gap-6">
           <div className="flex items-center justify-between">
             <h1 className="text-3xl font-bold text-text-primary-light dark:text-text-primary-dark">이력관리</h1>
