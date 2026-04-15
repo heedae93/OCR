@@ -14,6 +14,7 @@ interface NavItem {
 const baseNavItems: NavItem[] = [
   { href: '/', icon: 'dashboard', label: '대시보드' },
   { href: '/metadata', icon: 'dataset', label: '메타데이터 관리' },
+  { href: '/metadata-v2', icon: 'schema', label: '메타데이터관리_버전2' },
   { href: '/ocr-work', icon: 'document_scanner', label: 'OCR 작업하기' },
   { href: '/jobs', icon: 'history', label: '작업내역' },
   { href: '/history', icon: 'manage_history', label: '이력관리' },
