@@ -78,7 +78,7 @@ export default function Sidebar() {
   }, [])
 
   return (
-    <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark sticky top-0">
+    <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark fixed top-0 left-0 z-30">
       <div className="flex flex-col gap-4 p-4 h-full">
         {/* Logo */}
         <Link href="/" className="flex gap-3 items-center px-2 py-3 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200 group">

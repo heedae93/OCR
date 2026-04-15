@@ -92,9 +92,9 @@ export default function MetadataPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen w-full bg-background-light dark:bg-background-dark">
+    <div className="bg-background-light dark:bg-background-dark min-h-screen">
       <Sidebar />
-      <div className="flex flex-col gap-6 p-8 flex-1 max-w-3xl">
+      <div className="flex flex-col gap-6 p-8 ml-64">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-text-primary-light dark:text-text-primary-dark">메타데이터 관리</h1>

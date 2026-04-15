@@ -69,9 +69,9 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="relative flex min-h-screen w-full bg-background-light dark:bg-background-dark">
+      <div className="bg-background-light dark:bg-background-dark min-h-screen">
         <Sidebar />
-        <main className="flex-1 p-6 lg:p-10 flex items-center justify-center">
+        <main className="flex-1 ml-64 p-6 lg:p-10 flex items-center justify-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         </main>
       </div>
@@ -79,10 +79,10 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen w-full bg-background-light dark:bg-background-dark">
+    <div className="bg-background-light dark:bg-background-dark min-h-screen">
       <Sidebar />
 
-      <main className="flex-1 p-6 lg:p-10">
+      <main className="flex-1 ml-64 p-6 lg:p-10">
         <div className="w-full max-w-4xl mx-auto">
           <div className="flex flex-wrap justify-between gap-4 mb-8">
             <div className="flex flex-col gap-2">
