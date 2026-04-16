@@ -5,7 +5,7 @@ import Sidebar from '@/components/Sidebar'
 import { API_BASE_URL } from '@/lib/api'
 import {
   Plus, Pencil, Trash2, Search, ChevronRight, X, Save,
-  FileText, Tag, Cpu, ToggleLeft, ToggleRight, AlertCircle, CheckCircle2,
+  FileText, Tag, Cpu, AlertCircle, CheckCircle2,
 } from 'lucide-react'
 
 // ─────────────────────────────────────────────
@@ -513,7 +513,7 @@ export default function MetadataV2Page() {
     <div className="flex h-screen bg-background-light dark:bg-background-dark">
       <Sidebar />
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="flex-1 ml-64 flex flex-col min-w-0 overflow-hidden">
         {/* 헤더 */}
         <div className="px-6 py-4 border-b border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark">
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">메타데이터 관리</h1>
