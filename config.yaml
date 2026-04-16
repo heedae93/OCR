@@ -359,6 +359,6 @@ server:
   #   생략하면 frontend 포트를 기반으로 자동 생성됩니다.
   #   외부 IP로 접속하는 경우 아래처럼 추가하세요:
   #
-  # cors_origins:
-  #   - http://localhost:5017
-  #   - http://192.168.0.100:5017
+  cors_origins:
+    - http://localhost:6017
+    - http://127.0.0.1:6017
