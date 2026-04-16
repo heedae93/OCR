@@ -58,8 +58,10 @@ PII_PATTERNS = {
         r"\b[가-힣0-9·\-[ \t]]+(?:로|길)\s?\d+(?:-\d+)?(?:\s?\d+[동층호실]*)?\b"
     ],
     "NAME": [
-        # 레이블 뒤 이름
+        # 일반 레이블 뒤 이름
         r"(?:성\s*명|이\s*름|대\s*표\s*이\s*사|대표자|원\s*장|사\s*장|담당자|신청인|보호자|환\s*자|예\s*금\s*주|배\s*통\s*자|수\s*취\s*인|송\s*금\s*인|본\s*인|세\s*대\s*주)[\s\n:：]*([가-힣]{2,4})\b",
+        # 직급/직책 레이블 뒤 이름 (인사공고, 발령 문서 등)
+        r"(?:부\s*장|차\s*장|과\s*장|대\s*리|사\s*원|수\s*석|책\s*임|선\s*임|주\s*임|팀\s*장|본\s*부\s*장|전\s*무|상\s*무|이\s*사|사\s*장|대\s*표|원\s*장|교\s*수|교\s*사|강\s*사|의\s*사|간\s*호\s*사|약\s*사|변\s*호\s*사|회\s*계\s*사)[\s\n:：]+([가-힣]{2,4})\b",
     ],
 }
 
@@ -91,12 +93,21 @@ NAME_BLACKLIST = {
     "성명", "이름", "전화", "이메일", "주소", "직위", "직책", "부서", "팀명",
     "담당자", "대표자", "대표이사", "원장", "사장", "담당", "신청인", "보호자",
     "예금주", "수취인", "송금인", "본인", "세대주", "환자",
+    # 직급/직책 단어 (이사 뒤에 오는 단어가 이름으로 잡히는 오탐 방지)
+    "이사", "부장", "차장", "과장", "대리", "사원", "팀장", "본부장", "전무", "상무",
     # 일반 조사/어미/단어
     "이나", "와의", "에서", "으로", "에게", "한국", "서울", "부산", "대구",
     "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남",
     "전북", "전남", "경북", "경남", "제주", "이하", "여백", "확인", "내용",
     "관계", "번호", "등록", "등본", "초본", "발급", "신청", "용도", "목적",
     "정보", "처리", "동의", "거부", "철회", "권리", "의무", "책임", "규정",
+    # 업무/문서 용어 (직급 레이블 뒤에 올 수 있는 비이름 단어)
+    "해당", "기존", "변경", "없음", "있음", "이전", "신규", "현재", "현직",
+    "완료", "승인", "반려", "대상", "제외", "포함", "적용", "미적용",
+    "인사", "발령", "공고", "사항", "현황", "결과", "내역", "직급", "직책",
+    # 문서 섹션 표제어 합성어
+    "인사공고", "인적사항", "발령사항", "변경사항", "해당사항", "인사발령",
+    "직급변경", "직책변경", "인사현황", "발령현황", "직급현황",
 }
 
 # LLM 보조 프롬프트: NAME + ROAD_ADDRESS, 원문 그대로 추출 (교정 금지)
@@ -110,6 +121,7 @@ NAME 규칙:
 - 레이블 없이 단독으로 줄에 나오는 2~4글자 한글 이름도 추출 (이체확인증의 박채연, 배통자 같은 예금주/수취인 이름)
 - 일반 명사, 회사명, 기관명, 지명은 제외
 - 동일 이름이 여러 줄에 반복되면 각각 추출
+- 반드시 제외: 인사공고/인적사항/발령사항/변경사항 같은 문서 섹션 표제어, 직급명(이사/부장/과장 등), 업무 용어(발령/직급/처리/확인/승인 등)
 
 ROAD_ADDRESS 규칙:
 - 개인 주소, 회사 주소 모두 추출
@@ -160,8 +172,8 @@ def extract_pii_from_pages(ocr_pages: list) -> list:
                         value = _get_match_value(m)
                         if not value:
                             continue
-                        # NAME 블랙리스트: 라벨 단어 오탐 방지 (OCR 공백 포함 대응)
-                        if pii_type == "NAME" and re.sub(r'\s+', '', value) in NAME_BLACKLIST:
+                        # NAME 블랙리스트: 라벨/업무용어 오탐 방지 (확장 블랙리스트 사용)
+                        if pii_type == "NAME" and re.sub(r'\s+', '', value) in _STANDALONE_NAME_BLACKLIST:
                             continue
                         sub_bbox = _estimate_sub_bbox(value, text, bbox)
                         results.append({
@@ -193,8 +205,8 @@ def extract_pii_from_pages(ocr_pages: list) -> list:
                         value = _get_match_value(m)
                         if not value or _is_covered(value, pii_type, results):
                             continue
-                        # NAME 블랙리스트: 라벨 단어 오탐 방지 (OCR 공백 포함 대응)
-                        if pii_type == "NAME" and re.sub(r'\s+', '', value) in NAME_BLACKLIST:
+                        # NAME 블랙리스트: 라벨/업무용어 오탐 방지 (확장 블랙리스트 사용)
+                        if pii_type == "NAME" and re.sub(r'\s+', '', value) in _STANDALONE_NAME_BLACKLIST:
                             continue
                         # 값이 어느 라인에 속하는지 먼저 확인 후 tight bbox 사용
                         # → 레이블(l1)까지 마스킹하는 문제 방지
@@ -240,14 +252,18 @@ def extract_pii_from_pages(ocr_pages: list) -> list:
         ai_items = _extract_auxiliary_with_ai(page_text)
 
         for item in ai_items:
-            # NAME 블랙리스트 필터: 레이블/일반단어 오탐 제거 (공백 제거 후 비교로 OCR 공백 오인식 대응)
-            if item["type"] == "NAME" and re.sub(r'\s+', '', item["value"]) in NAME_BLACKLIST:
-                logger.debug(f"[LLM 블랙리스트] NAME 오탐 제거: {item['value']}")
-                continue
-            # 2글자 한글이 조사/어미인 경우 제거 (받침 없는 2글자 중 한국어 일상어 패턴)
-            if item["type"] == "NAME" and len(item["value"]) == 2:
-                # 일반명사/동사어간 등 이름이 아닌 것들 추가 필터
-                if re.search(r'[하되어이의을를은는가나]$', item["value"]):
+            if item["type"] == "NAME":
+                collapsed_val = re.sub(r'\s+', '', item["value"])
+                # NAME 블랙리스트 필터 (확장 블랙리스트 포함)
+                if collapsed_val in _STANDALONE_NAME_BLACKLIST:
+                    logger.debug(f"[LLM 블랙리스트] NAME 오탐 제거: {item['value']}")
+                    continue
+                # 문서 섹션 표제어 접미사 필터
+                if any(collapsed_val.endswith(s) for s in _NON_NAME_SUFFIXES):
+                    logger.debug(f"[LLM 접미사 필터] NAME 오탐 제거: {item['value']}")
+                    continue
+                # 2글자 한글이 조사/어미인 경우 제거
+                if len(collapsed_val) == 2 and re.search(r'[하되어이의을를은는가나]$', collapsed_val):
                     logger.debug(f"[LLM 블랙리스트] 조사/어미 패턴 제거: {item['value']}")
                     continue
 
@@ -290,6 +306,107 @@ def extract_pii_from_pages(ocr_pages: list) -> list:
     results = deduped_results
 
     logger.info(f"[3차 LLM 보조] 최종 {len(results)}개: {results}")
+
+    # ── 4차: 독립 라인 이름 감지 (LLM 없이 fallback) ─────────
+    results = _detect_standalone_names(ocr_pages, results)
+    logger.info(f"[4차 독립라인 이름 감지] 최종 {len(results)}개")
+
+    return results
+
+
+# 직급/직책 키워드 (인접 라인에 있으면 이름으로 판단)
+_JOB_TITLE_WORDS = {
+    "부장", "차장", "과장", "대리", "사원", "수석", "책임", "선임", "주임",
+    "팀장", "본부장", "전무", "상무", "이사", "사장", "대표", "원장",
+    "교수", "교사", "강사", "의사", "간호사", "약사", "변호사", "회계사",
+    "발령행", "발령", "직급", "직책", "수취인", "송금인", "예금주",
+}
+
+# 이름처럼 생겼지만 이름이 아닌 단어 (블랙리스트 확장)
+_STANDALONE_NAME_BLACKLIST = NAME_BLACKLIST | {
+    "인사", "공고", "개최", "결과", "아래", "같이", "변경", "현직", "사항",
+    "부장", "차장", "과장", "대리", "사원", "수석", "책임", "선임", "주임",
+    "팀장", "본부장", "전무", "상무", "이사", "사장", "대표", "원장",
+    "발령", "직급", "직책", "일자", "이하", "다음", "위와", "해당", "기존",
+    "변경", "없음", "완료", "처리", "확인", "승인", "반려", "수정", "삭제",
+    "추가", "등록", "조회", "출력", "저장", "취소", "닫기", "입력", "선택",
+    "건강", "보험", "연금", "세금", "급여", "수당", "상여", "퇴직", "휴가",
+    "출장", "교육", "훈련", "평가", "승진", "전보", "파견", "겸직", "해임",
+    "임명", "위촉", "해촉", "임기", "기간", "날짜", "제목", "내용", "비고",
+    "합계", "소계", "금액", "단위", "수량", "단가", "총액", "부가세",
+    # 문서 섹션 표제어 합성어 (개별 단어는 있지만 합성어는 없었음)
+    "인사공고", "인적사항", "발령사항", "기존이사", "변경사항", "해당사항",
+    "현황사항", "처리사항", "확인사항", "결과사항", "인사발령", "인사현황",
+    "발령현황", "직급현황", "직책현황", "인사내역", "발령내역", "직급변경",
+    "직책변경", "현직현황", "현직이사", "신규이사", "기존직급", "변경직급",
+    "사항없음", "해당없음", "내용없음", "비고없음",
+}
+
+# 이름이 아닌 단어의 접미사 (이 접미사로 끝나는 합성어는 무조건 이름 아님)
+_NON_NAME_SUFFIXES = {
+    "공고", "사항", "현황", "결과", "내역", "명단", "목록", "기준",
+    "방법", "절차", "양식", "서식", "기록", "현황표", "명세", "내용",
+}
+
+
+def _detect_standalone_names(ocr_pages: list, existing_results: list) -> list:
+    """
+    독립 라인에 2~4글자 한글만 있는 경우, 인접 라인 문맥으로 이름 여부 판단.
+    LLM 없이 동작하는 fallback 방식.
+    """
+    results = list(existing_results)
+    already_values = {(r["type"], r["value"]) for r in results}
+
+    for page in ocr_pages:
+        page_num = page["page_number"]
+        lines = [l for l in page.get("lines", []) if l.get("text") and l.get("bbox")]
+
+        for i, line in enumerate(lines):
+            raw_text = line.get("text", "").strip()
+            # OCR 공백 제거 후 순수 한글 2~4글자인지 확인
+            collapsed = re.sub(r'\s+', '', raw_text)
+            if not re.fullmatch(r'[가-힣]{2,4}', collapsed):
+                continue
+            if collapsed in _STANDALONE_NAME_BLACKLIST:
+                continue
+            # 문서 섹션 표제어 접미사로 끝나는 단어는 이름 아님
+            # 예: 인사공고(→공고), 인적사항(→사항), 발령사항(→사항)
+            if any(collapsed.endswith(s) for s in _NON_NAME_SUFFIXES):
+                continue
+
+            # 인접 라인(앞뒤 2줄) 중 직급/레이블이 있으면 이름으로 판단
+            context_lines = lines[max(0, i-2):i] + lines[i+1:min(len(lines), i+3)]
+            context_text = " ".join(l.get("text", "") for l in context_lines)
+            context_collapsed = re.sub(r'\s+', '', context_text)
+
+            is_name_context = any(kw in context_collapsed for kw in _JOB_TITLE_WORDS)
+            # 또는 인접 라인이 숫자(사번)인 경우도 이름 가능성 있음
+            if not is_name_context:
+                for cl in context_lines:
+                    ct = cl.get("text", "").strip()
+                    if re.fullmatch(r'\d{4,6}', re.sub(r'\s+', '', ct)):
+                        is_name_context = True
+                        break
+
+            if not is_name_context:
+                continue
+
+            # 이미 같은 value+bbox로 등록된 경우 스킵
+            bbox = line.get("bbox")
+            already = any(
+                r["type"] == "NAME" and r["value"] == collapsed and r.get("bbox") == bbox
+                for r in results
+            )
+            if already:
+                continue
+
+            results.append({
+                "type": "NAME",
+                "value": collapsed,
+                "page": page_num,
+                "bbox": bbox,
+            })
+            logger.info(f"[4차] 독립 이름 감지: '{collapsed}' (페이지 {page_num})")
 
     return results
 
@@ -746,7 +863,7 @@ def call_exaone(prompt, temperature=0.3):
     }
 
     try:
-        res = requests.post(url, json=payload, timeout=60)
+        res = requests.post(url, json=payload, timeout=20)
         res.raise_for_status()
         data = res.json()
         logger.info("[EXAONE] 응답 수신 완료")

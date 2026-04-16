@@ -72,7 +72,6 @@ export default function EditorPage() {
   const [showAccuracy, setShowAccuracy] = useState(false);
   const [showMasking, setShowMasking] = useState(false);
   const [maskingData, setMaskingData] = useState<any[]>([]);
-  const [maskingLoading, setMaskingLoading] = useState(false);
   const [isProcessingOCR, setIsProcessingOCR] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrCurrentPage, setOcrCurrentPage] = useState(0);
@@ -103,11 +102,9 @@ export default function EditorPage() {
   const [pendingEdits, setPendingEdits] = useState<PendingEdit[]>([]);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Get PDF URL with cache busting timestamp (computed once per component mount)
-  const pdfUrl = useMemo(() => {
-    const timestamp = Date.now();
-    return `${getProcessedFileUrl(jobId)}?v=${timestamp}`;
-  }, [jobId]);
+  // 항상 원본 PDF를 표시 — 마스킹은 프론트엔드 오버레이로 처리
+  const timestamp = useMemo(() => Date.now(), [jobId]);
+  const pdfUrl = useMemo(() => `${getProcessedFileUrl(jobId)}?v=${timestamp}`, [jobId, timestamp]);
 
   // Debounced auto-save function
   const performSave = useCallback(async () => {
@@ -170,6 +167,18 @@ export default function EditorPage() {
           // Stop polling when completed
           if (intervalId) {
             clearInterval(intervalId);
+          }
+
+          // OCR 완료 시 자동으로 PII 감지 + 마스킹 PDF 기본 표시
+          try {
+            const res = await fetch(`${API_BASE_URL}/api/masking/${jobId}/detect`);
+            if (res.ok) {
+              const data = await res.json();
+              setMaskingData(data.masked_boxes || []);
+              setShowMasking(true); // 마스킹 PDF 기본 표시
+            }
+          } catch (e) {
+            console.warn("PII 자동 감지 실패:", e);
           }
         } else if (jobData.status === "processing") {
           setIsProcessingOCR(true);
@@ -1006,44 +1015,16 @@ export default function EditorPage() {
                     </span>
                   </button>
                   <button
-                    onClick={async () => {
-                      if (showMasking) {
-                        setShowMasking(false);
-                        return;
-                      }
-                      if (maskingData.length > 0) {
-                        setShowMasking(true);
-                        return;
-                      }
-                      setMaskingLoading(true);
-                      try {
-                        const res = await fetch(
-                          `${API_BASE_URL}/api/masking/${jobId}/detect`,
-                        );
-                        if (!res.ok) throw new Error("PII 감지 실패");
-                        const data = await res.json();
-                        setMaskingData(data.masked_boxes || []);
-                        setShowMasking(true);
-                      } catch (e) {
-                        alert("개인정보 감지 중 오류가 발생했습니다.");
-                      } finally {
-                        setMaskingLoading(false);
-                      }
-                    }}
-                    disabled={maskingLoading}
+                    onClick={() => setShowMasking(!showMasking)}
                     className={`flex items-center gap-2 p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 whitespace-nowrap ${
                       showMasking
                         ? "bg-primary/10 text-primary"
                         : "text-text-secondary-light dark:text-text-secondary-dark"
-                    } disabled:opacity-50`}
+                    }`}
                     title="개인정보 마스킹"
                   >
-                    <span className="material-symbols-outlined">
-                      {maskingLoading ? "hourglass_top" : "gpp_maybe"}
-                    </span>
-                    <span className="text-sm hidden lg:inline">
-                      {maskingLoading ? "감지 중..." : "개인정보 마스킹"}
-                    </span>
+                    <span className="material-symbols-outlined">gpp_maybe</span>
+                    <span className="text-sm hidden lg:inline">개인정보 마스킹</span>
                   </button>
                   <button
                     onClick={() => setShowAccuracy(!showAccuracy)}

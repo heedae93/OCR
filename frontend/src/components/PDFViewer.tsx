@@ -29,6 +29,53 @@ interface PDFViewerProps {
   onPageDimensionsChange?: (width: number, height: number) => void
 }
 
+/** 한글/전각 문자 시각적 너비 (한글=2, 나머지=1) */
+function charVisualWidth(c: string): number {
+  const cp = c.codePointAt(0) ?? 0
+  if (
+    (cp >= 0x1100 && cp <= 0x11FF) ||
+    (cp >= 0x3000 && cp <= 0x9FFF) ||
+    (cp >= 0xAC00 && cp <= 0xD7A3) ||
+    (cp >= 0xF900 && cp <= 0xFAFF) ||
+    (cp >= 0xFF01 && cp <= 0xFF60)
+  ) return 2
+  return 1
+}
+
+/**
+ * value와 masked_value의 * 위치를 비교해 마스킹할 부분의 비율을 반환.
+ * 예: value="박채연", masked_value="박**" → { startRatio: 0.33, endRatio: 1.0 }
+ */
+function getPartialMaskOffset(
+  value: string | undefined,
+  maskedValue: string | undefined
+): { startRatio: number; endRatio: number } | null {
+  if (!value || !maskedValue || value.length !== maskedValue.length) return null
+  const firstStar = maskedValue.indexOf('*')
+  const lastStar  = maskedValue.lastIndexOf('*')
+  if (firstStar === -1) return null
+
+  const totalWidth = [...value].reduce((s, c) => s + charVisualWidth(c), 0)
+  if (totalWidth === 0) return null
+
+  const startWidth = [...value.slice(0, firstStar)].reduce((s, c) => s + charVisualWidth(c), 0)
+  const endWidth   = [...value.slice(0, lastStar + 1)].reduce((s, c) => s + charVisualWidth(c), 0)
+
+  return {
+    startRatio: startWidth / totalWidth,
+    endRatio:   endWidth   / totalWidth,
+  }
+}
+
+/** masked_value에서 * 부분만 추출 (예: "박**" → "**", "010-1234-****" → "****") */
+function extractStarPart(maskedValue: string | undefined): string {
+  if (!maskedValue) return ''
+  const first = maskedValue.indexOf('*')
+  const last  = maskedValue.lastIndexOf('*')
+  if (first === -1) return ''
+  return maskedValue.slice(first, last + 1)
+}
+
 export default function PDFViewer({
   pdfUrl,
   currentPage,
@@ -61,6 +108,9 @@ export default function PDFViewer({
 
   // Page cache for faster navigation
   const pageCacheRef = useRef<Map<number, any>>(new Map())
+
+  // 마스킹 박스별 샘플링된 배경색 { boxIndex: "rgb(...)" }
+  const [maskBgColors, setMaskBgColors] = useState<Record<number, string>>({})
 
   // Calculate effective zoom when fitToWidth is enabled
   const effectiveZoom = fitToWidth && containerWidth > 0 && nativePageWidth > 0
@@ -267,6 +317,70 @@ export default function PDFViewer({
       }
     }
   }, [pdf, currentPage, effectiveZoom, scale, ocrResults, totalPages, nativePageWidth])
+
+  // 페이지 렌더 완료 후 마스킹 박스 주변 픽셀 샘플링 → 배경색 추정
+  // 페이지 렌더 완료 후 마스킹 박스 주변 픽셀 샘플링 → 배경색 추정
+  useEffect(() => {
+    if (pageLoading || !showMasking || !canvasRef.current || !pageWidth || !pageHeight) return
+
+    // requestAnimationFrame: 캔버스가 실제로 브라우저에 그려진 뒤 샘플링
+    const raf = requestAnimationFrame(() => {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+
+      const ocrPage = ocrResults?.pages?.find(p => p.page_number === currentPage)
+      const sx = ocrPage?.width  ? pageWidth  / ocrPage.width  : 1
+      const sy = ocrPage?.height ? pageHeight / ocrPage.height : 1
+
+      const colors: Record<number, string> = {}
+
+      maskingData
+        .filter(box => box.page === currentPage && box.bbox?.length === 4)
+        .forEach((box, idx) => {
+          const [x1, y1, x2, y2] = box.bbox!
+          const partial = getPartialMaskOffset(box.value, box.masked_value)
+          const left  = (x1 + (partial ? partial.startRatio * (x2 - x1) : 0)) * sx
+          const width = (partial ? (partial.endRatio - partial.startRatio) * (x2 - x1) : x2 - x1) * sx
+          const top   = y1 * sy
+          const boxH  = (y2 - y1) * sy
+
+          // 박스 왼쪽 바깥 → 위 → 아래 순으로 시도 (흰 여백보다 실제 배경 우선)
+          const candidates = [
+            { x: Math.max(0, Math.round(left) - Math.round(width)), y: Math.round(top), w: Math.round(width), h: Math.round(boxH) },
+            { x: Math.round(left), y: Math.max(0, Math.round(top) - 6),  w: Math.round(width), h: 6 },
+            { x: Math.round(left), y: Math.min(canvas.height - 6, Math.round(top + boxH)), w: Math.round(width), h: 6 },
+          ]
+
+          for (const { x, y, w, h } of candidates) {
+            if (w < 1 || h < 1 || x < 0 || y < 0 || x + w > canvas.width || y + h > canvas.height) continue
+            try {
+              const imgData = ctx.getImageData(x, y, w, h)
+              let r = 0, g = 0, b = 0, a = 0, n = 0
+              for (let i = 0; i < imgData.data.length; i += 4) {
+                r += imgData.data[i]; g += imgData.data[i+1]; b += imgData.data[i+2]; a += imgData.data[i+3]; n++
+              }
+              if (n === 0) continue
+              const avgA = a / n
+              const avgR = Math.round(r / n)
+              const avgG = Math.round(g / n)
+              const avgB = Math.round(b / n)
+              const brightness = (avgR + avgG + avgB) / 3
+              // 투명(alpha≈0)이거나 너무 어두우면 다음 후보로 skip
+              if (avgA < 30 || brightness < 30) continue
+              colors[idx] = `rgb(${avgR},${avgG},${avgB})`
+              break
+            } catch { /* 캔버스 접근 실패 — 다음 후보 시도 */ }
+          }
+          // 모든 후보 실패 → white fallback (setMaskBgColors 기본값)
+        })
+
+      setMaskBgColors(colors)
+    })
+
+    return () => cancelAnimationFrame(raf)
+  }, [pageLoading, showMasking, currentPage, maskingData, pageWidth, pageHeight, ocrResults])
 
   // Get current page OCR data
   const currentPageOCR = ocrResults?.pages?.find(p => p.page_number === currentPage)
@@ -561,7 +675,7 @@ export default function PDFViewer({
           </div>
         )}
 
-        {/* Masking Overlay — 원본 텍스트 위치에 마스킹 텍스트를 자연스럽게 덮어씌움 */}
+        {/* Masking Overlay — 원본 PDF 위에 흰 박스를 오버레이로 덮음 (텍스트 없음) */}
         {showMasking && maskingData && maskingData.length > 0 && (
           <div
             className="absolute top-0 left-0 pointer-events-none"
@@ -571,43 +685,46 @@ export default function PDFViewer({
               .filter(box => box.page === currentPage && box.bbox && box.bbox.length === 4)
               .map((box, idx) => {
                 const [x1, y1, x2, y2] = box.bbox!
-                const boxW = (x2 - x1) * scaleX
+                const fullW = (x2 - x1) * scaleX
                 const boxH = (y2 - y1) * scaleY
-                const displayText = box.masked_value || '***'
-                // 박스 높이의 65%를 폰트 크기로, 박스 너비 초과 시 줄여서 맞춤
+
+                // 마스킹 부분만 좁혀서 덮기 (예: "박채연" → "채연" 부분만)
+                const partial = getPartialMaskOffset(box.value, box.masked_value)
+                const offsetLeft  = partial ? partial.startRatio * fullW : 0
+                const boxW        = partial ? (partial.endRatio - partial.startRatio) * fullW : fullW
+
+                const bgColor  = maskBgColors[idx] ?? 'white'
+                const starText = extractStarPart(box.masked_value)
                 const fontSize = Math.max(8, boxH * 0.65)
-                // OCR bbox 오차로 첫 글자 노출 방지: 왼쪽으로 여유 확보
-                const leftPad = Math.max(4, boxH * 0.5)
+
                 return (
                   <div
                     key={idx}
-                    className="absolute overflow-hidden"
+                    className="absolute overflow-hidden flex items-center"
                     style={{
-                      left: `${Math.max(0, x1 * scaleX - leftPad)}px`,
-                      top: `${y1 * scaleY}px`,
-                      width: `${boxW + leftPad}px`,
-                      height: `${boxH}px`,
-                      // 흰 배경으로 원본 텍스트(스캔 이미지)를 가림 — 박스처럼 보이지 않도록 border 없음
-                      backgroundColor: 'white',
-                      zIndex: 50,
-                      display: 'flex',
-                      alignItems: 'center',
+                      left:            `${x1 * scaleX + offsetLeft + 5}px`,
+                      top:             `${y1 * scaleY}px`,
+                      width:           `${boxW}px`,
+                      height:          `${boxH}px`,
+                      backgroundColor: bgColor,
+                      zIndex:          50,
+                      paddingLeft:     '1px',
                     }}
-                    title={`[${box.type}] ${box.value}`}
+                    title={`[${box.type}] ${box.masked_value || box.value}`}
                   >
-                    <span
-                      style={{
-                        fontSize: `${fontSize}px`,
-                        lineHeight: 1,
-                        color: '#111827',
-                        fontFamily: '"Malgun Gothic", "Apple SD Gothic Neo", sans-serif',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        letterSpacing: '0.02em',
-                      }}
-                    >
-                      {displayText}
-                    </span>
+                    {starText && (
+                      <span style={{
+                        fontSize:    `${fontSize}px`,
+                        lineHeight:  1,
+                        color:       '#1a1a1a',
+                        fontFamily:  '"Malgun Gothic", "Apple SD Gothic Neo", sans-serif',
+                        whiteSpace:  'nowrap',
+                        letterSpacing: '0.05em',
+                        userSelect:  'none',
+                      }}>
+                        {starText}
+                      </span>
+                    )}
                   </div>
                 )
               })}
