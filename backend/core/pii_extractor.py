@@ -1,10 +1,18 @@
 
 import re
-import json
 import logging
-import requests
+from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
+
+# KoBERT NER imports
+try:
+    from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
+    import torch
+    KOBERT_NER_AVAILABLE = True
+except ImportError:
+    KOBERT_NER_AVAILABLE = False
+    logger.warning("KoBERT NER 의존성 없음. 정규식 단독 동작.")
 
 PII_PATTERNS = {
     "PHONE": [
@@ -110,35 +118,80 @@ NAME_BLACKLIST = {
     "직급변경", "직책변경", "인사현황", "발령현황", "직급현황",
 }
 
-# LLM 보조 프롬프트: NAME + ROAD_ADDRESS, 원문 그대로 추출 (교정 금지)
-AI_AUXILIARY_PROMPT = """아래 텍스트에서 다음 두 유형의 개인정보를 빠짐없이 찾아 JSON 배열로만 출력하라.
-type은 반드시 NAME 또는 ROAD_ADDRESS 중 하나만 사용하라.
-value는 원문 텍스트에 있는 그대로 추출하라. 절대 교정하거나 변형하지 마라.
-같은 값이 여러 번 나와도 각각 별도 항목으로 추출하라.
+# KoBERT NER 모델 초기화
+_kobert_ner_model = None
+_kobert_ner_tokenizer = None
 
-NAME 규칙:
-- 성명/이름/대표이사/대표자/원장/사장/담당자/신청인/보호자/환자/예금주/수취인/송금인 등 레이블 뒤 2~4글자 한글 이름
-- 레이블 없이 단독으로 줄에 나오는 2~4글자 한글 이름도 추출 (이체확인증의 박채연, 배통자 같은 예금주/수취인 이름)
-- 일반 명사, 회사명, 기관명, 지명은 제외
-- 동일 이름이 여러 줄에 반복되면 각각 추출
-- 반드시 제외: 인사공고/인적사항/발령사항/변경사항 같은 문서 섹션 표제어, 직급명(이사/부장/과장 등), 업무 용어(발령/직급/처리/확인/승인 등)
+def _init_kobert_ner():
+    """KoBERT NER 모델 초기화 (lazy loading)"""
+    global _kobert_ner_model, _kobert_ner_tokenizer
+    if not KOBERT_NER_AVAILABLE:
+        return False
+    
+    if _kobert_ner_model is None:
+        try:
+            # 한국어 NER fine-tuned 모델 사용 (KLUE 데이터셋 기반)
+            model_name = "bespin-global/klue-roberta-base-ner"
+            _kobert_ner_tokenizer = AutoTokenizer.from_pretrained(model_name)
+            _kobert_ner_model = AutoModelForTokenClassification.from_pretrained(model_name)
+            logger.info("KoBERT NER 모델 로드 완료")
+        except Exception as e:
+            logger.error(f"KoBERT NER 모델 로드 실패: {e}")
+            return False
+    return True
 
-ROAD_ADDRESS 규칙:
-- 개인 주소, 회사 주소 모두 추출
-- 로/길 포함 도로명 주소 (예: 경인로71길70, 동호로17길300)
-- 건물명+호수 포함 주소도 추출 (예: 벽산디지털밸리 1102, 스마일원룸 106호)
-- 한 줄에 여러 주소가 있으면 각각 별도 항목으로 추출
-- OCR 오인식으로 글자가 심하게 깨진 경우에도 현주소/주소/거주지 등 레이블 뒤 내용이면 원문 그대로 추출
-- 주소가 여러 줄에 걸쳐 있으면 각 줄을 각각 별도 항목으로 추출 (예: "서울특별시 중구 동호로17길 300,"과 "106호 (신당동, 스마일원룸)"을 각각 추출)
+def _extract_with_kobert_ner(text: str) -> List[Dict[str, Any]]:
+    """KoBERT NER로 개인정보 추출 (NAME, ROAD_ADDRESS)"""
+    if not _init_kobert_ner():
+        logger.warning("KoBERT NER 모델 사용 불가 - 빈 결과 반환")
+        return []
+    
+    try:
+        # NER 파이프라인 생성
+        ner_pipeline = pipeline(
+            "ner", 
+            model=_kobert_ner_model, 
+            tokenizer=_kobert_ner_tokenizer,
+            aggregation_strategy="simple",
+            device=0 if torch.cuda.is_available() else -1
+        )
+        
+        entities = ner_pipeline(text)
+        
+        pii_items = []
+        for entity in entities:
+            entity_type = entity['entity_group']
+            value = entity['word'].strip()
+            
+            # NER 태그를 PII 타입으로 매핑
+            # 일반적인 NER 태그: PER(인물), LOC(장소), ORG(조직)
+            if entity_type in ['PER', 'PERSON', 'PS']:  # 사람
+                if len(value) >= 2:
+                    pii_items.append({
+                        "type": "NAME",
+                        "value": value,
+                        "confidence": entity['score']
+                    })
+            elif entity_type in ['LOC', 'LOCATION', 'LC']:  # 장소
+                # 주소 패턴 확인
+                if re.search(r'(?:로|길|동|읍|면|시|구|군|도)$', value) or len(value) >= 3:
+                    pii_items.append({
+                        "type": "ROAD_ADDRESS", 
+                        "value": value,
+                        "confidence": entity['score']
+                    })
+            # 필요시 다른 태그 추가 (ORG → BUSINESS_REG_NO 등)
+        
+        logger.info(f"[KoBERT NER] {len(pii_items)}개 추출")
+        return pii_items
+        
+    except Exception as e:
+        logger.error(f"KoBERT NER 추출 실패: {e}")
+        return []
 
-결과 없으면 [] 출력.
-출력 예: [{{"type":"NAME","value":"홍길동"}},{{"type":"NAME","value":"홍길동"}},{{"type":"ROAD_ADDRESS","value":"서울 영등포구 경인로71길70"}}]
-
-텍스트:
-{text}"""
-
-# LLM 보조가 담당하는 타입
-AUXILIARY_TYPES = {"NAME", "ROAD_ADDRESS"}
+# ============================================================
+# 메인 추출 함수
+# ============================================================
 
 
 # ============================================================
@@ -181,7 +234,7 @@ def extract_pii_from_pages(ocr_pages: list) -> list:
                             "value": value,
                             "page": page_num,
                             "bbox": sub_bbox or bbox,
-                            "_context": text,  # LLM 검증용 임시 필드
+                            "_context": text,
                         })
 
     results = _deduplicate(results)
@@ -229,19 +282,19 @@ def extract_pii_from_pages(ocr_pages: list) -> list:
                             "value": value,
                             "page": page_num,
                             "bbox": sub_bbox,
-                            "_context": l1["text"] + " " + l2["text"],  # LLM 검증용 임시 필드
+                            "_context": l1["text"] + " " + l2["text"],
                         })
 
     results = _deduplicate(results)
     logger.info(f"[2차 인접 라인 병합] 누적 {len(results)}개")
 
-    # ── 정규식 추출 NAME LLM 검증 ────────────────────────────
+    # ── 정규식 추출 NAME 규칙 검증 ───────────────────────────
     # 정규식은 레이블 뒤 한글을 기계적으로 잡기 때문에 조사/어미 오탐 가능성이 있음.
-    # LLM으로 문맥 기반 검증 후 실제 이름이 아닌 항목 제거.
+    # 블랙리스트/접미사/조사 패턴으로 실제 이름이 아닌 항목 제거.
     results = _validate_regex_names(results)
-    logger.info(f"[NAME LLM 검증] 완료 후 {len(results)}개")
+    logger.info(f"[NAME 규칙 검증] 완료 후 {len(results)}개")
 
-    # ── 3차: LLM 보조 (NAME) ────────────────────────────────
+    # ── 3차: KoBERT NER 보조 (NAME, ROAD_ADDRESS) ────────────────────────────────
     for page in ocr_pages:
         page_num = page["page_number"]
         lines = page.get("lines", [])
@@ -249,22 +302,22 @@ def extract_pii_from_pages(ocr_pages: list) -> list:
         if not page_text.strip():
             continue
 
-        ai_items = _extract_auxiliary_with_ai(page_text)
+        ner_items = _extract_with_kobert_ner(page_text)
 
-        for item in ai_items:
+        for item in ner_items:
             if item["type"] == "NAME":
                 collapsed_val = re.sub(r'\s+', '', item["value"])
                 # NAME 블랙리스트 필터 (확장 블랙리스트 포함)
                 if collapsed_val in _STANDALONE_NAME_BLACKLIST:
-                    logger.debug(f"[LLM 블랙리스트] NAME 오탐 제거: {item['value']}")
+                    logger.debug(f"[NER 블랙리스트] NAME 오탐 제거: {item['value']}")
                     continue
                 # 문서 섹션 표제어 접미사 필터
                 if any(collapsed_val.endswith(s) for s in _NON_NAME_SUFFIXES):
-                    logger.debug(f"[LLM 접미사 필터] NAME 오탐 제거: {item['value']}")
+                    logger.debug(f"[NER 접미사 필터] NAME 오탑 제거: {item['value']}")
                     continue
                 # 2글자 한글이 조사/어미인 경우 제거
                 if len(collapsed_val) == 2 and re.search(r'[하되어이의을를은는가나]$', collapsed_val):
-                    logger.debug(f"[LLM 블랙리스트] 조사/어미 패턴 제거: {item['value']}")
+                    logger.debug(f"[NER 블랙리스트] 조사/어미 패턴 제거: {item['value']}")
                     continue
 
             # 해당 value가 등장하는 모든 bbox 찾기
@@ -305,7 +358,7 @@ def extract_pii_from_pages(ocr_pages: list) -> list:
             deduped_results.append(r)
     results = deduped_results
 
-    logger.info(f"[3차 LLM 보조] 최종 {len(results)}개: {results}")
+    logger.info(f"[3차 KoBERT NER 보조] 최종 {len(results)}개: {results}")
 
     # ── 4차: 독립 라인 이름 감지 (LLM 없이 fallback) ─────────
     results = _detect_standalone_names(ocr_pages, results)
@@ -494,85 +547,42 @@ def _deduplicate(results: list) -> list:
 
 def _validate_regex_names(results: list) -> list:
     """
-    정규식으로 추출된 NAME 항목을 LLM으로 검증.
-    실제 이름이 아닌 항목(조사, 어미, 일반 단어 등)을 제거하고
+    정규식으로 추출된 NAME 항목을 규칙 기반으로 검증.
+    블랙리스트, 접미사 패턴, 조사/어미 패턴으로 오탐 제거.
     _context 임시 필드도 함께 정리.
     NAME이 아닌 타입은 그대로 통과.
     """
-    name_items = [(i, r) for i, r in enumerate(results) if r["type"] == "NAME"]
-
-    if not name_items:
-        # _context 필드만 정리
-        for r in results:
-            r.pop("_context", None)
-        return results
-
-    candidates = [
-        {"idx": i, "value": r["value"], "context": r.get("_context", r["value"])}
-        for i, r in name_items
-    ]
-
-    items_text = "\n".join(
-        f'{n+1}. 문장: "{c["context"]}" | 추출값: "{c["value"]}"'
-        for n, c in enumerate(candidates)
-    )
-    prompt = f"""아래 각 항목에서 '추출값'이 실제 사람 이름인지 판단하라.
-레이블(본인/세대주/담당자 등) 바로 뒤에 붙은 조사·어미이거나 일반 단어이면 NO.
-실제 사람 이름(2~4글자 한글)이면 YES.
-JSON 배열로만 출력. 형식: [{{"i":1,"name":true}},{{"i":2,"name":false}}]
-
-{items_text}"""
-
-    try:
-        raw = call_exaone(prompt)
-        cleaned = re.sub(r'```(?:json)?', '', raw).strip().rstrip('`')
-        m = re.search(r'\[.*\]', cleaned, re.DOTALL)
-        if not m:
-            logger.warning("[NAME 검증 LLM] JSON 파싱 실패, 전부 통과")
-            valid_result_indices = {c["idx"] for c in candidates}
-        else:
-            parsed = json.loads(m.group(0))
-            # YES인 항목의 원본 results 인덱스
-            valid_result_indices = set()
-            for item in parsed:
-                n = item.get("i", 0) - 1  # 0-based
-                if 0 <= n < len(candidates) and item.get("name") is True:
-                    valid_result_indices.add(candidates[n]["idx"])
-        logger.info(f"[NAME 검증 LLM] {len(name_items)}개 중 {len(valid_result_indices)}개 실제 이름으로 확인")
-    except Exception as e:
-        logger.warning(f"[NAME 검증 LLM] 오류: {e}, 전부 통과")
-        valid_result_indices = {c["idx"] for c in candidates}
-
-    # 검증 통과 여부 반영 + _context 필드 제거
+    before_count = sum(1 for r in results if r.get("type") == "NAME")
     filtered = []
-    for i, r in enumerate(results):
+    for r in results:
         r.pop("_context", None)
-        if r["type"] == "NAME" and i in {c["idx"] for c in candidates}:
-            if i in valid_result_indices:
-                filtered.append(r)
-        else:
+        if r["type"] != "NAME":
             filtered.append(r)
+            continue
+
+        collapsed = re.sub(r'\s+', '', r["value"])
+
+        # 블랙리스트 체크
+        if collapsed in _STANDALONE_NAME_BLACKLIST:
+            logger.debug(f"[NAME 규칙 검증] 블랙리스트 제거: {r['value']}")
+            continue
+
+        # 접미사 필터 (인사공고, 발령사항 등 문서 표제어)
+        if any(collapsed.endswith(s) for s in _NON_NAME_SUFFIXES):
+            logger.debug(f"[NAME 규칙 검증] 접미사 패턴 제거: {r['value']}")
+            continue
+
+        # 2글자이고 조사/어미로 끝나면 제거
+        if len(collapsed) == 2 and re.search(r'[하되어이의을를은는가나]$', collapsed):
+            logger.debug(f"[NAME 규칙 검증] 조사/어미 패턴 제거: {r['value']}")
+            continue
+
+        filtered.append(r)
+
+    after_count = sum(1 for r in filtered if r.get("type") == "NAME")
+    logger.info(f"[NAME 규칙 검증] {before_count}개 중 {after_count}개 통과")
     return filtered
 
-
-def _extract_auxiliary_with_ai(page_text: str) -> list:
-    """LLM으로 NAME + ROAD_ADDRESS 추출 (2회 호출 후 합집합). 원문 그대로 반환."""
-    prompt = AI_AUXILIARY_PROMPT.format(text=page_text)
-    all_items = []
-    for attempt in range(2):
-        raw = call_exaone(prompt)
-        parsed = _parse_ai_response(raw)
-        aux_items = [i for i in parsed if i.get("type") in AUXILIARY_TYPES]
-        logger.info(f"[LLM 보조] 시도 {attempt + 1}: {aux_items}")
-        all_items.extend(aux_items)
-
-    seen = set()
-    deduped = []
-    for item in all_items:
-        if item["value"] not in seen:
-            seen.add(item["value"])
-            deduped.append(item)
-    return deduped
 
 
 # ============================================================
@@ -690,44 +700,6 @@ def _estimate_sub_bbox(pii_value: str, line_text_orig: str, line_bbox: list):
     return [sub_x1, y1, sub_x2, y2]
 
 
-# ============================================================
-# AI 응답 파싱
-# ============================================================
-
-def _parse_ai_response(raw: str) -> list:
-    """AI 응답에서 JSON 배열을 파싱해 정규화된 item 목록 반환."""
-    try:
-        cleaned = raw.strip()
-        cleaned = re.sub(r"```json", "", cleaned)
-        cleaned = re.sub(r"```", "", cleaned)
-        cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
-
-        match = re.search(r"\[.*\]", cleaned, re.DOTALL)
-        if not match:
-            logger.warning("[AI] JSON 배열 없음")
-            return []
-
-        items = json.loads(match.group(0))
-        result = []
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            if "type" not in item or "value" not in item:
-                continue
-            value = str(item["value"]).strip()
-            if not value:
-                continue
-            normalized = normalize_type(item["type"])
-            if normalized not in ALLOWED_TYPES:
-                logger.debug(f"[AI] 알 수 없는 type 버림: {normalized}")
-                continue
-            result.append({"type": normalized, "value": value})
-        return result
-
-    except Exception as e:
-        logger.warning(f"[AI] 파싱 실패: {e}")
-        return []
-
 
 def normalize_type(raw_type: str) -> str:
     key = raw_type.strip().lower().replace(" ", "")
@@ -843,36 +815,3 @@ def mask_value(pii_type: str, value: str) -> str:
     return v[:half] + '*' * (len(v) - half)
 
 
-# ============================================================
-# EXAONE LLM 호출
-# ============================================================
-
-def call_exaone(prompt, temperature=0.3):
-    url = "http://211.233.58.220:8079/api/generate"
-    model_name = "exaone3.5:32b"
-
-    payload = {
-        "model": model_name,
-        "prompt": prompt,
-        "stream": False,
-        "options": {
-            "temperature": temperature,
-            "top_p": 0.9,
-            "num_predict": 2048
-        }
-    }
-
-    try:
-        res = requests.post(url, json=payload, timeout=20)
-        res.raise_for_status()
-        data = res.json()
-        logger.info("[EXAONE] 응답 수신 완료")
-        return data.get("response", "")
-
-    except requests.exceptions.Timeout:
-        logger.error("[EXAONE] timeout")
-        return ""
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"[EXAONE] 요청 실패: {e}")
-        return ""
