@@ -693,6 +693,7 @@ def process_job_task(job_id: str):
                 # Use per-GPU lock to prevent concurrent access to the same model
                 with gpu_predict_locks[gpu_id]:
                     ocr_results = page_ocr_model.predict(image_path)
+                structured_result = getattr(page_ocr_model, 'structured_result', None) or {}
                 ocr_elapsed = time.time() - ocr_start
 
                 if not ocr_results:
@@ -701,7 +702,8 @@ def process_job_task(job_id: str):
                 else:
                     logger.info(f"[Page {page_num}] OCR completed in {ocr_elapsed:.2f}s ({len(ocr_results)} text blocks)")
 
-                layout_regions = []
+                layout_regions = structured_result.get('layout_info', {}).get('regions', []) or []
+                table_regions = structured_result.get('layout_info', {}).get('tables', []) or []
                 column_info = {
                     'is_double_column': False,
                     'column_boundary': None,
@@ -709,11 +711,10 @@ def process_job_task(job_id: str):
                 }
 
                 if ocr_results:
-                    layout_regions = []
                     layout_cache_enabled = getattr(Config, 'LAYOUT_CACHE_ENABLED', True)
                     layout_cache_path = Config.PROCESSED_DIR / f"{job_id}_page_{page_num:04d}_layout.json"
 
-                    if Config.USE_LAYOUT_DETECTION:
+                    if Config.USE_LAYOUT_DETECTION and not layout_regions:
                         cached = False
                         if layout_cache_enabled and layout_cache_path.exists():
                             try:
@@ -774,7 +775,10 @@ def process_job_task(job_id: str):
                     "column_confidence": column_info.get('confidence'),
                     "layout_type": column_info.get('layout_type', 'single'),
                     "layout_regions": len(layout_regions),
-                    "layout_counts": dict(layout_counts)
+                    "layout_counts": dict(layout_counts),
+                    "table_count": len(table_regions),
+                    "table_model": Config.OCR_PPSTRUCTURE_TABLE_MODEL if table_regions else None,
+                    "table_regions": table_regions,
                 }
 
                 ocr_page = OCRPage(

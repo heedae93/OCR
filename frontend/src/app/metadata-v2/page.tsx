@@ -362,7 +362,13 @@ function DocTypeModal({
 // ─────────────────────────────────────────────
 
 export default function MetadataV2Page() {
-  const [userId, setUserId] = useState('default')
+  const [userId] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'default'
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || '{}')
+      return u.user_id || 'default'
+    } catch { return 'default' }
+  })
 
   // 문서 유형 상태
   const [docTypes, setDocTypes] = useState<DocumentType[]>([])
@@ -388,12 +394,7 @@ export default function MetadataV2Page() {
     setTimeout(() => setToast(null), 2500)
   }
 
-  useEffect(() => {
-    try {
-      const u = JSON.parse(localStorage.getItem('user') || '{}')
-      if (u.user_id) setUserId(u.user_id)
-    } catch {}
-  }, [])
+  // userId는 useState 초기화에서 localStorage로 직접 읽음 (race condition 방지)
 
   // ── 문서 유형 목록 로드 ──────────────────────
   const loadDocTypes = useCallback(async () => {
