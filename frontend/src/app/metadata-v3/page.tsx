@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Sidebar from '@/components/Sidebar'
 import { API_BASE_URL } from '@/lib/api'
 import {
-  Shield, CheckCircle2, AlertCircle, RefreshCw, Save, Plus, Trash2, Tag
+  Shield, CheckCircle2, AlertCircle, RefreshCw, Save, Plus, Trash2, Tag, X
 } from 'lucide-react'
 
 const DEFAULT_DOC_TYPES = ['공문서', '계약서', '보고서', '학술논문', '법령문서', '회의록', '영수증', '신분증', '기타', '미분류']
@@ -12,7 +12,7 @@ const DEFAULT_DOC_TYPES = ['공문서', '계약서', '보고서', '학술논문'
 const DEFAULT_PII_ITEMS = [
   { key: 'rrn',     label: '주민등록번호', desc: '000000-0000000 형식',       color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
   { key: 'phone',   label: '전화번호',     desc: '010-0000-0000 형식',        color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' },
-  { key: 'email',   label: '이메일',       desc: 'user@domain.com 형식',     color: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300' },
+  { key: 'email',   label: '이메일',       desc: 'user@domain.com 형식',      color: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' },
   { key: 'card',    label: '신용카드번호', desc: '0000-0000-0000-0000 형식',  color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300' },
   { key: 'address', label: '주소',         desc: '도로명/지번 주소',           color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' },
   { key: 'name',    label: '이름/인명',    desc: 'NER 기반 인명 감지',        color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300' },
@@ -22,7 +22,6 @@ export default function MetadataV3Page() {
   const [userId, setUserId] = useState('')
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
 
-  // Data states
   const [categories, setCategories] = useState<{id: number, name: string}[]>([])
   const [customFields, setCustomFields] = useState<{id: number, field_key: string, label: string, pattern: string, description: string}[]>([])
   const [rules, setRules] = useState<Record<string, string[]>>({})
@@ -31,7 +30,6 @@ export default function MetadataV3Page() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  // Modals / Inputs
   const [newCatName, setNewCatName] = useState('')
   const [isAddingCat, setIsAddingCat] = useState(false)
 
@@ -155,6 +153,20 @@ export default function MetadataV3Page() {
     }
   }
 
+  // Combine default fields with custom fields
+  const allFields = [
+    ...DEFAULT_PII_ITEMS.map(i => ({ ...i, isCustom: false, id: null, pattern: null })),
+    ...customFields.map(f => ({
+      key: f.field_key,
+      label: f.label,
+      desc: f.description || '특정한 패턴이 일치하면 마스킹 처리',
+      color: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+      isCustom: true,
+      id: f.id,
+      pattern: f.pattern
+    }))
+  ]
+
   return (
     <div className="flex h-screen bg-bg-light dark:bg-bg-dark">
       <Sidebar />
@@ -248,109 +260,86 @@ export default function MetadataV3Page() {
                   <RefreshCw className="animate-spin text-primary" size={32} />
                 </div>
               ) : (
-                <div className="space-y-12">
-                  
-                  {/* 기본 항목 */}
-                  <div>
-                    <h3 className="text-sm font-bold text-text-secondary-light dark:text-text-secondary-dark mb-5 tracking-widest uppercase">기본 마스킹 시스템 제공 필드</h3>
-                    <div className="grid grid-cols-2 xl:grid-cols-3 gap-5">
-                      {DEFAULT_PII_ITEMS.map(item => {
-                        const enabled = currentPiiTypes.includes(item.key)
-                        return (
-                          <button key={item.key} onClick={() => togglePii(item.key)} className={`flex flex-col text-left p-5 rounded-3xl border-2 transition-all duration-200 ease-out ${enabled ? 'border-primary bg-primary/5 dark:bg-primary/10 shadow-md transform scale-[1.01]' : 'border-border-light dark:border-border-dark hover:border-text-secondary-light/40 bg-surface-light dark:bg-surface-dark opacity-80 hover:opacity-100 hover:shadow-sm'}`}>
-                            <div className="flex items-center justify-between w-full mb-3">
-                              <span className={`text-xs px-3 py-1.5 rounded-full font-bold ${item.color}`}>{item.label}</span>
-                              <div className={`w-12 h-6 rounded-full flex items-center transition-colors px-1 ${enabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-700'}`}>
-                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transform transition-transform ${enabled ? 'translate-x-[22px]' : 'translate-x-0'}`} />
-                              </div>
-                            </div>
-                            <p className="text-sm text-text-secondary-light dark:text-text-secondary-dark font-medium leading-relaxed">{item.desc}</p>
-                          </button>
-                        )
-                      })}
-                    </div>
+                <div>
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-base font-bold text-text-secondary-light dark:text-text-secondary-dark tracking-widest uppercase">
+                      마스킹 설정 필드
+                    </h3>
+                    <button onClick={() => setIsAddingField(true)} className="flex items-center gap-1.5 text-sm font-bold text-sky-600 bg-sky-50 dark:bg-sky-900/30 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-900/50 px-4 py-2 rounded-full transition-colors shadow-sm">
+                      <Plus size={16} /> 커스텀 필드 생성
+                    </button>
                   </div>
 
-                  {/* 커스텀 항목 */}
-                  <div>
-                    <div className="flex items-center justify-between mb-5 border-t border-border-light dark:border-border-dark pt-8">
-                      <h3 className="text-sm font-bold text-text-secondary-light dark:text-text-secondary-dark tracking-widest uppercase">사용자 정의 마스킹 필드</h3>
-                      {!isAddingField && (
-                        <button onClick={() => setIsAddingField(true)} className="flex items-center gap-1.5 text-sm font-bold text-sky-600 bg-sky-50 dark:bg-sky-900/30 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-900/50 px-4 py-2 rounded-full transition-colors shadow-sm">
-                          <Plus size={16} /> 커스텀 필드 생성
-                        </button>
-                      )}
-                    </div>
-                    
-                    <div className="grid grid-cols-2 xl:grid-cols-3 gap-5">
-                      {customFields.map(field => {
-                        const enabled = currentPiiTypes.includes(field.field_key)
-                        return (
-                          <div key={field.id} className={`group relative flex flex-col text-left p-5 rounded-3xl border-2 transition-all duration-200 ease-out ${enabled ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20 shadow-md transform scale-[1.01]' : 'border-border-light dark:border-border-dark hover:border-text-secondary-light/40 bg-surface-light dark:bg-surface-dark opacity-90 hover:opacity-100 hover:shadow-sm'}`}>
-                            
-                            {/* 삭제 버튼 - hover 상태일때만 등장 */}
-                            <button onClick={(e) => { e.stopPropagation(); deleteCustomField(field.id, field.field_key) }} className="absolute -top-3 -right-3 w-8 h-8 bg-red-100 text-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 shadow transform scale-75 group-hover:scale-100 transition-all hover:bg-red-500 hover:text-white" title="필드 완전 삭제">
+                  <div className="grid grid-cols-2 xl:grid-cols-3 gap-5">
+                    {allFields.map(item => {
+                      const enabled = currentPiiTypes.includes(item.key)
+                      
+                      return (
+                        <div key={item.key} className={`group relative flex flex-col text-left p-5 rounded-3xl border-2 transition-all duration-200 ease-out ${enabled ? (item.isCustom ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20 shadow-md transform scale-[1.01]' : 'border-primary bg-primary/5 dark:bg-primary/10 shadow-md transform scale-[1.01]') : 'border-border-light dark:border-border-dark hover:border-text-secondary-light/40 bg-surface-light dark:bg-surface-dark opacity-80 hover:opacity-100 hover:shadow-sm'}`}>
+                          
+                          {/* 삭제 버튼 - 커스텀 필드일때만 등장 */}
+                          {item.isCustom && item.id && (
+                            <button onClick={(e) => { e.stopPropagation(); deleteCustomField(item.id!, item.key) }} className="absolute -top-3 -right-3 w-8 h-8 bg-red-100 text-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 shadow transform scale-75 group-hover:scale-100 transition-all hover:bg-red-500 hover:text-white z-10" title="필드 완전 삭제">
                               <Trash2 size={14} />
                             </button>
+                          )}
 
-                            <div className="flex items-start justify-between w-full mb-3 cursor-pointer" onClick={() => togglePii(field.field_key)}>
-                              <div className="flex flex-col gap-2 max-w-[70%]">
-                                <span className={`text-xs px-3 py-1.5 rounded-full font-bold self-start ${enabled ? 'bg-sky-500 text-white' : 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300'}`}>{field.label}</span>
-                                {field.pattern && <span className="text-[10px] font-mono tracking-tighter text-text-secondary-light dark:text-text-secondary-dark break-all leading-tight bg-black/5 dark:bg-white/10 px-2 py-1 rounded">{field.pattern}</span>}
-                              </div>
-                              <div className={`w-12 h-6 rounded-full flex items-center transition-colors px-1 shrink-0 ${enabled ? 'bg-sky-500' : 'bg-gray-300 dark:bg-gray-700'}`}>
-                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transform transition-transform ${enabled ? 'translate-x-[22px]' : 'translate-x-0'}`} />
-                              </div>
+                          <div className="flex items-start justify-between w-full mb-3 cursor-pointer" onClick={() => togglePii(item.key)}>
+                            <div className="flex flex-col gap-2 max-w-[70%]">
+                              <span className={`text-xs px-3 py-1.5 rounded-full font-bold self-start ${enabled && item.isCustom ? 'bg-sky-500 text-white' : item.color}`}>{item.label}</span>
+                              {item.pattern && <span className="text-[10px] font-mono tracking-tighter text-text-secondary-light dark:text-text-secondary-dark break-all leading-tight bg-black/5 dark:bg-white/10 px-2 py-1 rounded">{item.pattern}</span>}
                             </div>
-                            <p className="text-sm text-text-secondary-light dark:text-text-secondary-dark font-medium leading-relaxed">{field.description || '특정한 패턴이 일치하면 마스킹 처리'}</p>
+                            <div className={`w-12 h-6 rounded-full flex items-center transition-colors px-1 shrink-0 ${enabled ? (item.isCustom ? 'bg-sky-500' : 'bg-primary') : 'bg-gray-300 dark:bg-gray-700'}`}>
+                              <div className={`w-4 h-4 rounded-full bg-white shadow-sm transform transition-transform ${enabled ? 'translate-x-[22px]' : 'translate-x-0'}`} />
+                            </div>
                           </div>
-                        )
-                      })}
-
-                      {isAddingField && (
-                        <div className="p-5 rounded-3xl border-2 border-sky-400 border-dashed bg-sky-50/50 dark:bg-sky-900/10 shadow-inner flex flex-col gap-4 animate-in zoom-in-95 fade-in">
-                          <div>
-                            <label className="text-[10px] font-bold text-sky-600 mb-1 block uppercase">표시 라벨 (필수)</label>
-                            <input autoFocus placeholder="예: 차량번호, 계좌번호" className="w-full text-base font-bold bg-transparent border-b border-border-light dark:border-border-dark outline-none py-1 focus:border-sky-500 text-text-primary-light dark:text-text-primary-dark" value={newField.label} onChange={e => setNewField({...newField, label: e.target.value})} />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-sky-600 mb-1 block uppercase">정규표현식 매칭 패턴 (선택)</label>
-                            <input placeholder="예: [0-9]{2,3}[가-힣]{1}[0-9]{4}" className="w-full font-mono text-sm tracking-tight bg-transparent border-b border-border-light dark:border-border-dark outline-none py-1 focus:border-sky-500 text-text-primary-light dark:text-text-primary-dark" value={newField.pattern} onChange={e => setNewField({...newField, pattern: e.target.value})} />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-sky-600 mb-1 block uppercase">상세 설명 (선택)</label>
-                            <input placeholder="어떤 목적의 마스킹인지 작성" className="w-full text-sm bg-transparent border-b border-border-light dark:border-border-dark outline-none py-1 focus:border-sky-500 text-text-primary-light dark:text-text-primary-dark" value={newField.description} onChange={e => setNewField({...newField, description: e.target.value})} />
-                          </div>
-                          
-                          <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-border-light dark:border-border-dark">
-                             <button onClick={() => setIsAddingField(false)} className="text-sm font-bold px-4 py-2 text-text-secondary-light hover:text-text-primary-light rounded-xl hover:bg-black/5">취소</button>
-                             <button onClick={addCustomField} className="text-sm font-bold px-5 py-2 bg-sky-500 text-white rounded-xl shadow-md hover:scale-105 active:scale-95 transition-transform disabled:opacity-50" disabled={!newField.label.trim()}>필드 생성</button>
-                          </div>
+                          <p className="text-sm text-text-secondary-light dark:text-text-secondary-dark font-medium leading-relaxed">{item.desc}</p>
                         </div>
-                      )}
-                      
-                      {customFields.length === 0 && !isAddingField && (
-                        <div className="col-span-1 lg:col-span-2 xl:col-span-3 border-2 border-dashed border-border-light dark:border-border-dark rounded-3xl p-10 flex flex-col items-center justify-center text-center opacity-70 hover:opacity-100 transition-opacity">
-                           <div className="w-12 h-12 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center mb-4">
-                             <Plus className="text-text-secondary-light" size={24} />
-                           </div>
-                           <p className="text-base font-bold text-text-primary-light dark:text-text-primary-dark">등록된 커스텀 마스킹 필드가 없습니다.</p>
-                           <p className="text-sm text-text-secondary-light dark:text-text-secondary-dark mt-2 font-medium max-w-sm">
-                             회사 내부용 기밀 키워드나, 특별한 정규식이 필요한 경우 커스텀 필드를 생성하여 등록해 보세요.
-                           </p>
-                        </div>
-                      )}
-                    </div>
+                      )
+                    })}
                   </div>
-
                 </div>
               )}
             </div>
           </div>
         </div>
 
+        {/* 커스텀 필드 생성 모달 */}
+        {isAddingField && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-surface-light dark:bg-surface-dark w-11/12 max-w-md p-8 rounded-3xl shadow-2xl flex flex-col gap-5 animate-in zoom-in-95 duration-200">
+              <div className="flex justify-between items-center mb-1">
+                <h3 className="text-xl font-bold text-text-primary-light dark:text-text-primary-dark">새 커스텀 필드 생성</h3>
+                <button onClick={() => setIsAddingField(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary-light transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-sky-600 mb-1.5 block uppercase tracking-wide">표시 라벨 (필수)</label>
+                <input autoFocus placeholder="예: 차량번호, 계좌번호" className="w-full text-base font-bold bg-transparent border-b-2 border-border-light dark:border-border-dark outline-none py-2 focus:border-sky-500 text-text-primary-light dark:text-text-primary-dark transition-colors" value={newField.label} onChange={e => setNewField({...newField, label: e.target.value})} />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-sky-600 mb-1.5 block uppercase tracking-wide">정규표현식 매칭 패턴 (선택)</label>
+                <input placeholder="예: [0-9]{2,3}[가-힣]{1}[0-9]{4}" className="w-full font-mono text-sm tracking-tight bg-transparent border-b-2 border-border-light dark:border-border-dark outline-none py-2 focus:border-sky-500 text-text-primary-light dark:text-text-primary-dark transition-colors" value={newField.pattern} onChange={e => setNewField({...newField, pattern: e.target.value})} />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-sky-600 mb-1.5 block uppercase tracking-wide">상세 설명 (선택)</label>
+                <input placeholder="어떤 목적의 마스킹인지 작성" className="w-full text-sm bg-transparent border-b-2 border-border-light dark:border-border-dark outline-none py-2 focus:border-sky-500 text-text-primary-light dark:text-text-primary-dark transition-colors" value={newField.description} onChange={e => setNewField({...newField, description: e.target.value})} />
+              </div>
+              
+              <div className="flex justify-end gap-3 mt-4">
+                 <button onClick={() => setIsAddingField(false)} className="text-sm font-bold px-5 py-2.5 text-text-secondary-light hover:text-text-primary-light rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-colors">취소</button>
+                 <button onClick={addCustomField} className="text-sm font-bold px-6 py-2.5 bg-sky-500 text-white rounded-xl shadow-md hover:bg-sky-600 focus:scale-95 transition-all disabled:opacity-50" disabled={!newField.label.trim()}>생성하기</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {toast && (
-          <div className={`fixed bottom-8 right-8 flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl text-sm font-bold text-white z-50 animate-in slide-in-from-bottom-5 fade-in duration-300 ${toast.ok ? 'bg-green-500' : 'bg-red-500'}`}>
+           <div className={`fixed bottom-8 right-8 flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl text-sm font-bold text-white z-[60] animate-in slide-in-from-bottom-5 fade-in duration-300 ${toast.ok ? 'bg-green-500' : 'bg-red-500'}`}>
             {toast.ok ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
             {toast.msg}
           </div>
