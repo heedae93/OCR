@@ -61,15 +61,21 @@ PII_PATTERNS = {
         r"\b[가-힣]{1,2}\s?\d{2,3}\s?[가-힣]\s?\d{4}\b",
     ],
     "ROAD_ADDRESS": [
-        # [ \t] → \s? 로 변경: 인접 라인 병합 시 로/길 뒤 번지가 다음 줄에 있어도 매칭
-        # 단, 앞쪽 주소 prefix는 [ \t] 유지 (줄바꿈 포함 시 다른 줄로 번지는 탐욕적 매칭 방지)
-        r"\b[가-힣0-9·\-[ \t]]+(?:로|길)\s?\d+(?:-\d+)?(?:\s?\d+[동층호실]*)?\b"
+        # 도로명 주소: xxx로/길 번지 (동/층/호 선택)
+        r"\b[가-힣0-9·\- \t]+(?:로|길)\s?\d+(?:-\d+)?(?:\s?\d+[동층호실]*)?\b",
+        # 지번 주소: 시/도 + 구/군 + 동/읍/면 + 번지
+        r"\b[가-힣]+(?:특별시|광역시|특별자치시|특별자치도|시|도)\s*[가-힣]+(?:구|군)\s*[가-힣]+(?:읍|면|동|가)\s*\d+(?:-\d+)?\b",
+        # 지번 주소 (시/구 없이 동/읍/면 + 번지만)
+        r"\b[가-힣]{2,}(?:읍|면|동|가)\s+\d+(?:-\d+)?\b",
     ],
     "NAME": [
         # 일반 레이블 뒤 이름
         r"(?:성\s*명|이\s*름|대\s*표\s*이\s*사|대표자|원\s*장|사\s*장|담당자|신청인|보호자|환\s*자|예\s*금\s*주|배\s*통\s*자|수\s*취\s*인|송\s*금\s*인|본\s*인|세\s*대\s*주)[\s\n:：]*([가-힣]{2,4})\b",
         # 직급/직책 레이블 뒤 이름 (인사공고, 발령 문서 등)
         r"(?:부\s*장|차\s*장|과\s*장|대\s*리|사\s*원|수\s*석|책\s*임|선\s*임|주\s*임|팀\s*장|본\s*부\s*장|전\s*무|상\s*무|이\s*사|사\s*장|대\s*표|원\s*장|교\s*수|교\s*사|강\s*사|의\s*사|간\s*호\s*사|약\s*사|변\s*호\s*사|회\s*계\s*사)[\s\n:：]+([가-힣]{2,4})\b",
+        # 이름 뒤 경칭/서명 표시 (귀하, 님, 씨, (인), (서명) 등)
+        r"([가-힣]{2,4})\s*(?:귀하|님|씨)\b",
+        r"([가-힣]{2,4})\s*[\(\（]\s*(?:인|서명|印)\s*[\)\）]",
     ],
 }
 
@@ -122,6 +128,24 @@ NAME_BLACKLIST = {
 _kobert_ner_model = None
 _kobert_ner_tokenizer = None
 
+KOBERT_NAME_CONFIDENCE_MIN = 0.60
+
+
+def _is_valid_kobert_name(value: str, score: float) -> bool:
+    collapsed = re.sub(r'\s+', '', value)
+    if score < KOBERT_NAME_CONFIDENCE_MIN:
+        return False
+    if not re.fullmatch(r'[가-힣]{2,4}', collapsed):
+        return False
+    if collapsed in _STANDALONE_NAME_BLACKLIST:
+        return False
+    if any(collapsed.endswith(s) for s in _NON_NAME_SUFFIXES):
+        return False
+    if len(collapsed) == 2 and re.search(r'[하되어이의을를은는가나]$', collapsed):
+        return False
+    return True
+
+
 def _init_kobert_ner():
     """KoBERT NER 모델 초기화 (lazy loading)"""
     global _kobert_ner_model, _kobert_ner_tokenizer
@@ -166,17 +190,17 @@ def _extract_with_kobert_ner(text: str) -> List[Dict[str, Any]]:
             # NER 태그를 PII 타입으로 매핑
             # 일반적인 NER 태그: PER(인물), LOC(장소), ORG(조직)
             if entity_type in ['PER', 'PERSON', 'PS']:  # 사람
-                if len(value) >= 2:
+                if _is_valid_kobert_name(value, entity['score']):
                     pii_items.append({
                         "type": "NAME",
                         "value": value,
                         "confidence": entity['score']
                     })
             elif entity_type in ['LOC', 'LOCATION', 'LC']:  # 장소
-                # 주소 패턴 확인
-                if re.search(r'(?:로|길|동|읍|면|시|구|군|도)$', value) or len(value) >= 3:
+                # 주소 접미사가 있는 경우만 주소로 판정 (len >= 3 조건 제거 — 오탐 방지)
+                if re.search(r'(?:로|길|동|읍|면|시|구|군|도|가)\s*\d*$', value):
                     pii_items.append({
-                        "type": "ROAD_ADDRESS", 
+                        "type": "ROAD_ADDRESS",
                         "value": value,
                         "confidence": entity['score']
                     })
