@@ -87,7 +87,7 @@ class OCREngine:
             tuple: (preprocessed_image_path, original_size)
                    original_size is (width, height) of the original image
         """
-        if not self.config.DENOISE_ENABLED and not self.config.UPSCALE_ENABLED and not self.config.CLAHE_ENABLED:
+        if not self.config.DENOISE_ENABLED and not self.config.UPSCALE_ENABLED and not self.config.CLAHE_ENABLED: 
             # Get original size even if no preprocessing
             img = cv2.imread(image_path)
             if img is not None:

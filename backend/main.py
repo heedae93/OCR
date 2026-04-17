@@ -51,6 +51,7 @@ from core.ctc_patch import patch_ctc_decoder
 from api import ocr, storage, drive, jobs, sessions, settings, export, auth, users,masking
 from api import metadata_settings
 from api import metadata_v2
+from api import metadata_v3
 from api import history
 
 
@@ -106,6 +107,7 @@ app.include_router(masking.router, tags=["Masking"])
 app.include_router(users.router, prefix="/api", tags=["Users"])
 app.include_router(metadata_settings.router, prefix="/api", tags=["MetadataSettings"])
 app.include_router(metadata_v2.router, prefix="/api", tags=["MetadataV2"])
+app.include_router(metadata_v3.router, prefix="/api", tags=["MetadataV3"])
 app.include_router(history.router, prefix="/api", tags=["History"])
 
 # Mount static files

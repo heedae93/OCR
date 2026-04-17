@@ -11,6 +11,95 @@ from database import SessionLocal, Job, OCRPage, DocumentChunk, User, Session, S
 logger = logging.getLogger(__name__)
 
 
+def _collect_ner_preview_lines(ocr_data: Dict[str, Any], limit: int = 12) -> list[Dict[str, Any]]:
+    """Pick a small set of OCR lines to preview in console logs."""
+    kv_candidates = []
+    fallback_candidates = []
+
+    for page in ocr_data.get('pages', []):
+        page_number = page.get('page_number', 1)
+        for line in page.get('lines', []):
+            text = (line.get('text') or '').strip()
+            if not text:
+                continue
+
+            preview_line = {
+                "page": page_number,
+                "text": text,
+                "bbox": line.get('bbox'),
+            }
+
+            if ':' in text or '：' in text:
+                kv_candidates.append(preview_line)
+            else:
+                fallback_candidates.append(preview_line)
+
+            if len(kv_candidates) >= limit:
+                return kv_candidates[:limit]
+
+    if kv_candidates:
+        return kv_candidates[:limit]
+    return fallback_candidates[:limit]
+
+
+def log_ner_preview(job_id: str, ocr_data: Dict[str, Any]) -> None:
+    """Emit OCR -> NER preview logs so uploads can be verified from console."""
+    preview_lines = _collect_ner_preview_lines(ocr_data)
+    logger.info("[NER PREVIEW] ===== job %s =====", job_id)
+
+    if not preview_lines:
+        logger.info("[NER PREVIEW] No OCR lines available for preview.")
+        logger.info("[NER PREVIEW] ============================")
+        return
+
+    try:
+        from utils.ner_extractor import get_ner_extractor
+
+        extractor = get_ner_extractor()
+        if not extractor.is_available:
+            logger.warning(
+                "[NER PREVIEW] NER model unavailable. Install/load dependencies to see entity mapping."
+            )
+            for line in preview_lines:
+                logger.info(
+                    "[NER PREVIEW] page=%s OCR='%s' -> NER unavailable",
+                    line["page"],
+                    line["text"],
+                )
+            logger.info("[NER PREVIEW] ============================")
+            return
+
+        for line in preview_lines:
+            items = extractor.extract_kv_from_lines([{
+                "text": line["text"],
+                "bbox": line["bbox"],
+            }])
+
+            if not items:
+                logger.info(
+                    "[NER PREVIEW] page=%s OCR='%s' -> no entity detected",
+                    line["page"],
+                    line["text"],
+                )
+                continue
+
+            for item in items:
+                logger.info(
+                    "[NER PREVIEW] page=%s OCR='%s' -> key='%s', value='%s', entity_type='%s', score=%s",
+                    line["page"],
+                    line["text"],
+                    item.get("key"),
+                    item.get("value"),
+                    item.get("entity_type"),
+                    item.get("score"),
+                )
+
+    except Exception as preview_err:
+        logger.error("[NER PREVIEW] Failed for job %s: %s", job_id, preview_err)
+
+    logger.info("[NER PREVIEW] ============================")
+
+
 def create_job_in_db(
     job_id: str,
     filename: str,
@@ -182,6 +271,9 @@ def update_job_ocr_results(
                 keywords_top_n=settings.keywords_top_n,
             )
 
+            # Always print a small OCR -> NER preview to the backend console for debugging.
+            log_ner_preview(job_id, ocr_data)
+
             if settings.extract_full_text:
                 job.full_text = meta["full_text"]
             if settings.extract_language:
@@ -209,6 +301,21 @@ def update_job_ocr_results(
                         char_start=chunk["char_start"],
                         char_end=chunk["char_end"],
                     ))
+
+            # NER Key-Value 추출
+            if getattr(settings, "extract_ner", False):
+                try:
+                    from utils.ner_extractor import get_ner_extractor
+                    extractor = get_ner_extractor()
+                    if extractor.is_available:
+                        kv_items = extractor.extract_from_ocr_pages(ocr_data.get("pages", []))
+                        # bbox는 JSON 직렬화 가능하도록 정리
+                        for item in kv_items:
+                            item.pop("raw_entities", None)
+                        job.extracted_fields = json.dumps(kv_items, ensure_ascii=False)
+                        logger.info(f"[NER] job {job_id}: {len(kv_items)}개 KV 쌍 저장")
+                except Exception as ner_err:
+                    logger.error(f"[NER] 추출 실패 job {job_id}: {ner_err}")
 
             db.commit()
             logger.info(

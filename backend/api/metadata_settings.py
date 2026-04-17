@@ -28,6 +28,7 @@ class MetadataSettings(Base):
     extract_char_count = Column(Boolean, default=True)
     extract_word_count = Column(Boolean, default=True)
     extract_chunks = Column(Boolean, default=True)
+    extract_ner = Column(Boolean, default=False)   # NER Key-Value 추출
     chunk_size = Column(Integer, default=500)
     chunk_overlap = Column(Integer, default=50)
     keywords_top_n = Column(Integer, default=20)
@@ -43,6 +44,7 @@ class MetadataSettingsSchema(BaseModel):
     extract_char_count: bool = True
     extract_word_count: bool = True
     extract_chunks: bool = True
+    extract_ner: bool = False
     chunk_size: int = 500
     chunk_overlap: int = 50
     keywords_top_n: int = 20
