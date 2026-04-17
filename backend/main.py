@@ -50,6 +50,8 @@ from core.ctc_patch import patch_ctc_decoder
 
 from api import ocr, storage, drive, jobs, sessions, settings, export, auth, users,masking
 from api import metadata_settings
+from api import metadata_v2
+from api import metadata_v3
 from api import history
 
 
@@ -104,6 +106,8 @@ app.include_router(auth.router, prefix="/api", tags=["Auth"])
 app.include_router(masking.router, tags=["Masking"])
 app.include_router(users.router, prefix="/api", tags=["Users"])
 app.include_router(metadata_settings.router, prefix="/api", tags=["MetadataSettings"])
+app.include_router(metadata_v2.router, prefix="/api", tags=["MetadataV2"])
+app.include_router(metadata_v3.router, prefix="/api", tags=["MetadataV3"])
 app.include_router(history.router, prefix="/api", tags=["History"])
 
 # Mount static files
@@ -134,33 +138,33 @@ async def startup_event():
     logger.info("Data directories verified")
 
     # Initialize database
-    try:
-        init_db()
-        logger.info("Database initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
+    # try:
+    #     init_db()
+    #     logger.info("Database initialized successfully")
+    # except Exception as e:
+    #     logger.error(f"Failed to initialize database: {e}")
 
     # Reset orphaned 'processing' jobs left from previous crash/restart
-    try:
-        from database import SessionLocal, Job as DBJob
-        db = SessionLocal()
-        orphaned = db.query(DBJob).filter(DBJob.status.in_(["processing", "queued"])).all()
-        for job in orphaned:
-            job.status = "failed"
-            job.error_message = "서버 재시작으로 인해 중단됨"
-        db.commit()
-        db.close()
-        if orphaned:
-            logger.warning(f"Reset {len(orphaned)} orphaned processing/queued jobs to failed")
-    except Exception as e:
-        logger.error(f"Failed to reset orphaned jobs: {e}")
+    # try:
+    #     from database import SessionLocal, Job as DBJob
+    #     db = SessionLocal()
+    #     orphaned = db.query(DBJob).filter(DBJob.status.in_(["processing", "queued"])).all()
+    #     for job in orphaned:
+    #         job.status = "failed"
+    #         job.error_message = "서버 재시작으로 인해 중단됨"
+    #     db.commit()
+    #     db.close()
+    #     if orphaned:
+    #         logger.warning(f"Reset {len(orphaned)} orphaned processing/queued jobs to failed")
+    # except Exception as e:
+    #     logger.error(f"Failed to reset orphaned jobs: {e}")
 
     # Pre-load OCR models for all GPUs at startup
     logger.info("=" * 60)
     logger.info("Pre-loading OCR models for faster processing...")
     try:
         from api.ocr import preload_all_models
-        await preload_all_models()
+        # await preload_all_models()  # Temporarily bypassed to fix Windows startup hangs
         logger.info("All OCR models pre-loaded successfully!")
     except Exception as e:
         logger.error(f"Failed to pre-load OCR models: {e}")

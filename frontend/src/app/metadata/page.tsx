@@ -13,6 +13,7 @@ interface Settings {
   extract_char_count: boolean
   extract_word_count: boolean
   extract_chunks: boolean
+  extract_ner: boolean
   chunk_size: number
   chunk_overlap: number
   keywords_top_n: number
@@ -27,6 +28,7 @@ const FIELD_LABELS: { key: keyof Settings; label: string; desc: string; type: 'b
   { key: 'extract_char_count', label: '글자 수',       desc: '추출된 텍스트의 글자 수를 저장합니다.', type: 'bool' },
   { key: 'extract_word_count', label: '단어 수',       desc: '추출된 텍스트의 단어 수를 저장합니다.', type: 'bool' },
   { key: 'extract_chunks',     label: 'RAG 청크 분할', desc: '텍스트를 청크 단위로 분할하여 저장합니다. RAG 검색에 사용됩니다.', type: 'bool' },
+  { key: 'extract_ner',        label: 'NER 추출 (Key-Value)', desc: '한국어 NER 모델로 "성명: 한대희" 같은 항목을 자동 분류합니다. 최초 실행 시 모델 다운로드가 필요합니다.', type: 'bool' },
 ]
 
 const NUM_LABELS: { key: keyof Settings; label: string; desc: string; min: number; max: number; step: number }[] = [
@@ -45,6 +47,7 @@ export default function MetadataPage() {
     extract_char_count: true,
     extract_word_count: true,
     extract_chunks: true,
+    extract_ner: false,
     chunk_size: 500,
     chunk_overlap: 50,
     keywords_top_n: 20,
@@ -92,9 +95,9 @@ export default function MetadataPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen w-full bg-background-light dark:bg-background-dark">
+    <div className="bg-background-light dark:bg-background-dark min-h-screen">
       <Sidebar />
-      <div className="flex flex-col gap-6 p-8 flex-1 max-w-3xl">
+      <div className="flex flex-col gap-6 p-8 ml-64">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-text-primary-light dark:text-text-primary-dark">메타데이터 관리</h1>

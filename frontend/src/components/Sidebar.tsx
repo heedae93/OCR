@@ -14,6 +14,7 @@ interface NavItem {
 const baseNavItems: NavItem[] = [
   { href: '/', icon: 'dashboard', label: '대시보드' },
   { href: '/metadata', icon: 'dataset', label: '메타데이터 관리' },
+  { href: '/metadata-v3', icon: 'security', label: '문서별 마스킹 설정' },
   { href: '/ocr-work', icon: 'document_scanner', label: 'OCR 작업하기' },
   { href: '/jobs', icon: 'history', label: '작업내역' },
   { href: '/history', icon: 'manage_history', label: '이력관리' },
@@ -77,8 +78,8 @@ export default function Sidebar() {
   }, [])
 
   return (
-    <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark sticky top-0">
-      <div className="flex flex-col gap-4 p-4 h-full">
+    <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark fixed top-0 left-0 z-30 overflow-y-auto">
+      <div className="flex flex-col gap-4 p-4 min-h-full">
         {/* Logo */}
         <Link href="/" className="flex gap-3 items-center px-2 py-3 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200 group">
           <div className="bg-gradient-to-br from-primary to-primary/70 rounded-xl size-10 flex items-center justify-center shadow-lg shadow-primary/20 group-hover:shadow-primary/30 transition-shadow duration-200">
@@ -105,7 +106,7 @@ export default function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative overflow-hidden ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative overflow-hidden shrink-0 ${
                   active
                     ? 'bg-primary/10 dark:bg-primary/15 text-primary'
                     : 'hover:bg-black/5 dark:hover:bg-white/5 text-text-secondary-light dark:text-text-secondary-dark hover:text-text-primary-light dark:hover:text-text-primary-dark'
@@ -143,7 +144,7 @@ export default function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative overflow-hidden ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative overflow-hidden shrink-0 ${
                   active
                     ? 'bg-primary/10 dark:bg-primary/15 text-primary'
                     : 'hover:bg-black/5 dark:hover:bg-white/5 text-text-secondary-light dark:text-text-secondary-dark hover:text-text-primary-light dark:hover:text-text-primary-dark'

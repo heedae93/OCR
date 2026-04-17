@@ -136,9 +136,9 @@ export default function UserManagementPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen w-full bg-background-light dark:bg-background-dark">
+    <div className="bg-background-light dark:bg-background-dark min-h-screen">
       <Sidebar />
-      <div className="flex flex-col gap-6 p-8 flex-1">
+      <div className="flex flex-col gap-6 p-8 flex-1 ml-64">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

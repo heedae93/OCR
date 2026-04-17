@@ -924,7 +924,8 @@ export default function SessionSidebar({ onDocumentSelect, currentJobId }: Sessi
     }
 
     try {
-      const response = await fetch(`${API_BASE}/sessions`, {
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      const response = await fetch(`${API_BASE}/sessions?user_id=${user.user_id || ''}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

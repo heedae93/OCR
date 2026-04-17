@@ -17,6 +17,7 @@
 #  PaddleOCR 기반 텍스트 인식 엔진의 동작을 제어합니다.
 #
 ocr:
+  engine: pp_structure
   # GPU 사용 여부  (true: GPU 가속 / false: CPU 전용)
   use_gpu: true
 
@@ -35,8 +36,8 @@ ocr:
 
   # 텍스트 감지 시 이미지 축소 한계 (px)
   #   값이 클수록 작은 텍스트도 감지하지만 속도가 느려짐
-  #   권장: 1200 (속도) ~ 2000 (정확도)
-  detection_limit_side_len: 1200
+  #   권장: 2000 (정확도) — tiling 사용 시 타일 단위 해상도 기준
+  detection_limit_side_len: 2000
 
   # PaddleOCR 라인 병합 사용 여부
   #   false: PaddleOCR가 반환한 라인 bbox를 그대로 사용 (권장)
@@ -49,11 +50,38 @@ ocr:
   # 커스텀 인식 모델 경로 (상대경로 가능)
   #   예: data/models/best_0828
   recognition_model_dir: data/models/best_0828
+  ppstructure_layout_model: "PP-DocLayout-L"
+  ppstructure_recognition_model: "PP-OCRv5_server_rec"
+  use_table_recognition: true
+  table_model_name: "SLANet_plus"
+  wireless_table_model_name: "SLANet"
+
+  # ── Table Transformer (Microsoft DETR 기반) ──
+  #  slanet            : 기존 PaddleX SLANet/SLANet+ 만 사용
+  #  table_transformer : Table Transformer 단독 (감지 + 구조 인식)
+  #  hybrid            : PP-Structure 레이아웃으로 표 위치 감지 →
+  #                      Table Transformer 로 구조 정밀 인식 (권장)
+  table_recognition_backend: "hybrid"
+  table_transformer:
+    detection_model: "microsoft/table-transformer-detection"
+    structure_model: "microsoft/table-transformer-structure-recognition-v1.1-all"
+    detection_threshold: 0.9   # 표 감지 신뢰도 임계값
+    structure_threshold: 0.6   # 행/열 구조 인식 신뢰도 임계값
 
   # 사용 가능한 커스텀 모델 목록 (향후 모델 교체 시 활용)
   custom_models:
     best_0828: "data/models/best_0828"
     # best_1012_8M: "data/models/best_1012_8M"
+
+  # ── 타일링(Chunking) 설정 ──
+  #  고해상도 스캔 문서에서 놓치는 텍스트를 줄이기 위해
+  #  페이지를 겹치는 타일로 나눠 각각 OCR 후 NMS로 합칩니다.
+  #  이미지의 가장 긴 변이 tile_size 이하면 타일링을 건너뜁니다.
+  tiling:
+    enabled: true
+    tile_size: 1500       # 타일 한 변의 최대 크기 (px)
+    overlap: 150          # 인접 타일 간 겹침 크기 (px) — 경계 누락 방지
+    nms_iou_threshold: 0.3  # 중복 제거 IoU 임계값
 
   # ── 읽기 순서(Reading Order) 설정 ──
   #  다단 문서에서 텍스트 블록의 읽기 순서를 지능적으로 정렬합니다.
@@ -329,7 +357,9 @@ user:
 #
 database:
   # PostgreSQL 예시 (아이디:ocr_user / 비밀번호:1234 / 호스트:192.168.0.231 / DB이름:ocr_db)
-  url: "postgresql+psycopg2://ocr_user:1234@192.168.0.231:3306/ocr_db"
+  # too many clients 오류 발생 시 임시로 SQLite 사용 (아래 주석 해제)
+  # url: "postgresql+psycopg2://ocr_user:1234@192.168.0.231:3306/ocr_db"
+  url: "sqlite:///data/ocr_gen.db"
 
   # SQLite 예시 (기본값)
   # url: "sqlite:///data/ocr_gen.db"
@@ -359,6 +389,6 @@ server:
   #   생략하면 frontend 포트를 기반으로 자동 생성됩니다.
   #   외부 IP로 접속하는 경우 아래처럼 추가하세요:
   #
-  # cors_origins:
-  #   - http://localhost:5017
-  #   - http://192.168.0.100:5017
+  cors_origins:
+    - http://localhost:6017
+    - http://127.0.0.1:6017

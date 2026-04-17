@@ -44,6 +44,9 @@ data/models/*
 !data/models/.gitkeep
 !data/models/best_0828/
 
+# HuggingFace cache (large model files)
+data/hf_cache/
+
 # Logs
 logs/*
 !logs/.gitkeep

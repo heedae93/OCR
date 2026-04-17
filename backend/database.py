@@ -1,7 +1,7 @@
 """
 SQLite database setup and models using SQLAlchemy
 """
-from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, Text, ForeignKey
+from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, Text, ForeignKey, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -20,7 +20,11 @@ engine_args = {"echo": False, "pool_pre_ping": True}
 if DATABASE_URL.startswith("sqlite"):
     engine_args["connect_args"] = {"check_same_thread": False}
 else:
-    engine_args["pool_recycle"] = 3600
+    # PostgreSQL: 커넥션 풀 제한 (too many clients 방지)
+    engine_args["pool_recycle"] = 1800   # 30분마다 커넥션 갱신
+    engine_args["pool_size"] = 5         # 최대 풀 크기
+    engine_args["max_overflow"] = 5      # 초과 허용 커넥션 수
+    engine_args["pool_timeout"] = 30     # 커넥션 대기 타임아웃(초)
 
 engine = create_engine(DATABASE_URL, **engine_args)
 
@@ -102,6 +106,7 @@ class Job(Base):
     detected_dates = Column(Text, nullable=True)         # JSON: ["2026년 4월 10일"]
     char_count = Column(Integer, nullable=True)
     word_count = Column(Integer, nullable=True)
+    extracted_fields = Column(Text, nullable=True)   # JSON: NER 추출 KV 쌍 목록
 
     # Relationships
     user = relationship("User", back_populates="jobs")
@@ -234,12 +239,48 @@ class DownloadHistory(Base):
     version = relationship("FileVersion")
 
 
+class DocumentCategory(Base):
+    """사용자가 추가한 문서 카테고리"""
+    __tablename__ = "document_categories"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    name = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+
+class CustomMaskingField(Base):
+    """사용자 커스텀 마스킹 필드 정의"""
+    __tablename__ = "custom_masking_fields"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    field_key = Column(String(100), nullable=False)   # 내부 고유키 (예: custom_xxx)
+    label = Column(String(100), nullable=False)       # UI 표시명 (예: 회사명, 차대번호)
+    pattern = Column(String(500), nullable=True)      # 정규식 패턴 지정
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+
 def init_db():
     """Initialize database and create tables"""
     try:
         # Create all tables
         Base.metadata.create_all(bind=engine)
         logger.info(f"Database initialized at {DATABASE_URL}")
+
+        # 기존 DB에 새 컬럼 추가 (없는 경우에만)
+        # with engine.connect() as conn:
+        #     for col_sql, col_name in [
+        #         ("ALTER TABLE jobs ADD COLUMN extracted_fields TEXT", "jobs.extracted_fields"),
+        #         ("ALTER TABLE metadata_settings ADD COLUMN extract_ner BOOLEAN DEFAULT 0", "metadata_settings.extract_ner"),
+        #     ]:
+        #         try:
+        #             conn.execute(text(col_sql))
+        #             conn.commit()
+        #             logger.info(f"DB migration: {col_name} 컬럼 추가 완료")
+        #         except Exception:
+        #             pass  # 이미 존재하면 무시
 
         # Create default user if not exists
         db = SessionLocal()
