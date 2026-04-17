@@ -20,7 +20,10 @@ engine_args = {"echo": False, "pool_pre_ping": True}
 if DATABASE_URL.startswith("sqlite"):
     engine_args["connect_args"] = {"check_same_thread": False}
 else:
-    engine_args["pool_recycle"] = 3600
+    engine_args["pool_size"] = 5        # 기본 유지 연결 수
+    engine_args["max_overflow"] = 10    # 최대 추가 연결 수 (총 15개)
+    engine_args["pool_timeout"] = 30    # 연결 대기 타임아웃 (초)
+    engine_args["pool_recycle"] = 1800  # 30분마다 연결 갱신
 
 engine = create_engine(DATABASE_URL, **engine_args)
 
@@ -266,17 +269,17 @@ def init_db():
         logger.info(f"Database initialized at {DATABASE_URL}")
 
         # 기존 DB에 새 컬럼 추가 (없는 경우에만)
-        with engine.connect() as conn:
-            for col_sql, col_name in [
-                ("ALTER TABLE jobs ADD COLUMN extracted_fields TEXT", "jobs.extracted_fields"),
-                ("ALTER TABLE metadata_settings ADD COLUMN extract_ner BOOLEAN DEFAULT 0", "metadata_settings.extract_ner"),
-            ]:
-                try:
-                    conn.execute(text(col_sql))
-                    conn.commit()
-                    logger.info(f"DB migration: {col_name} 컬럼 추가 완료")
-                except Exception:
-                    pass  # 이미 존재하면 무시
+        # with engine.connect() as conn:
+        #     for col_sql, col_name in [
+        #         ("ALTER TABLE jobs ADD COLUMN extracted_fields TEXT", "jobs.extracted_fields"),
+        #         ("ALTER TABLE metadata_settings ADD COLUMN extract_ner BOOLEAN DEFAULT 0", "metadata_settings.extract_ner"),
+        #     ]:
+        #         try:
+        #             conn.execute(text(col_sql))
+        #             conn.commit()
+        #             logger.info(f"DB migration: {col_name} 컬럼 추가 완료")
+        #         except Exception:
+        #             pass  # 이미 존재하면 무시
 
         # Create default user if not exists
         db = SessionLocal()
