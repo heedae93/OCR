@@ -11,7 +11,7 @@ cd "$SCRIPT_DIR"
 
 # ── config.yaml에서 설정 읽기 ──────────────────────────────
 read_config() {
-    python -c "
+    /c/Users/glgld/.conda/envs/bbocr/python.exe -c "
 import yaml, sys
 with open('config.yaml', 'r', encoding='utf-8') as f:
     cfg = yaml.safe_load(f)
@@ -132,7 +132,8 @@ fi
 # ── Backend 시작 ──────────────────────────────────────────
 echo "[INFO] Starting backend server..."
 cd backend
-nohup python -m uvicorn main:app \
+PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
+nohup /c/Users/glgld/.conda/envs/bbocr/python.exe -m uvicorn main:app \
     --host "$BACKEND_HOST" \
     --port "$BACKEND_PORT" \
     > ../logs/backend.log 2>&1 &
@@ -155,26 +156,17 @@ echo "$WORKER_PID" > ../logs/worker.pid
 cd ..
 echo "[OK] Celery Worker started (PID: $WORKER_PID)"
 
-# ── Frontend 빌드 확인 ────────────────────────────────────
-# .next가 없거나 .env.local이 .next보다 새로우면 빌드
-NEED_BUILD=false
-if [ ! -d "frontend/.next" ]; then
-    NEED_BUILD=true
-elif [ "frontend/.env.local" -nt "frontend/.next/BUILD_ID" ] 2>/dev/null; then
-    NEED_BUILD=true
-fi
-
-if [ "$NEED_BUILD" = true ]; then
-    echo "[INFO] Frontend build needed. Building..."
-    cd frontend
-    npm run build
-    cd ..
-    echo "[OK] Frontend build complete"
-fi
-
-# ── Frontend 시작 ─────────────────────────────────────────
-echo "[INFO] Starting frontend server..."
+# ── Frontend 빌드 후 프로덕션 모드로 시작 ────────────────────
+# Windows에서 next dev의 webpack.js 파일 잠금(errno -4094) 문제를 회피합니다.
+echo "[INFO] Building frontend (production build)..."
 cd frontend
+npx next build > ../logs/frontend_build.log 2>&1
+if [ $? -ne 0 ]; then
+    echo "[ERROR] Frontend build failed. See logs/frontend_build.log"
+    cat ../logs/frontend_build.log | tail -20
+    exit 1
+fi
+echo "[INFO] Starting frontend server (production mode)..."
 nohup npx next start \
     -p "$FRONTEND_PORT" \
     -H "$FRONTEND_HOST" \

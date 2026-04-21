@@ -45,9 +45,9 @@ class OCREngine:
             ocr_params = {
                 "use_angle_cls": False,                    # Disable for speed
                 "det_limit_side_len": 2000,                # Higher resolution for better line detection
-                "det_db_thresh": 0.3,                      # Binarization threshold
-                "det_db_box_thresh": 0.3,                  # Box confidence threshold (lower = more text)
-                "det_db_unclip_ratio": 1.8,                # CRITICAL: Higher value merges chars into lines
+                "det_db_thresh": 0.25,                     # Binarization threshold (낮출수록 더 많은 텍스트 감지)
+                "det_db_box_thresh": 0.25,                 # Box confidence threshold (낮출수록 더 많은 박스 유지)
+                "det_db_unclip_ratio": 2.0,                # CRITICAL: Higher value merges chars into lines (글자 분리 방지)
                 "rec_batch_num": self.config.OCR_REC_BATCH_NUM,
             }
 
@@ -286,6 +286,12 @@ class OCREngine:
                     continue
 
             logger.info(f"OCR completed: {len(ocr_blocks)} text blocks found")
+
+            # 인접 문자 블록 병합: 같은 줄에서 너무 잘게 쪼개진 블록을 하나로 합침
+            # (예: "주"+"소" → "주소", "서울시"+"강남구" → "서울시강남구")
+            ocr_blocks = self._merge_fragmented_blocks(ocr_blocks)
+            logger.info(f"After merge: {len(ocr_blocks)} text blocks")
+
             return ocr_blocks if ocr_blocks else None
 
         except Exception as e:
@@ -299,6 +305,71 @@ class OCREngine:
                     os.unlink(temp_path)
                 except Exception as e:
                     logger.debug(f"Failed to clean up temp file: {e}")
+
+    @staticmethod
+    def _merge_fragmented_blocks(blocks: List[Dict]) -> List[Dict]:
+        """
+        같은 줄에 있는 인접 텍스트 블록을 병합한다.
+
+        OCR이 "주소"를 "주"+"소"처럼 글자 단위로 쪼개는 문제를 해결.
+        기준:
+          - y 중심 차이 < 블록 높이의 60% → 같은 줄로 판단
+          - 수평 간격 < 글자 높이의 1.2배 → 병합 대상
+        병합 시 텍스트는 공백 없이 이어 붙이고, bbox는 합집합으로 확장.
+        """
+        if len(blocks) <= 1:
+            return blocks
+
+        def y_center(b):
+            return (b['bbox'][1] + b['bbox'][3]) / 2
+
+        # y 중심 → x 시작 순으로 정렬
+        sorted_blocks = sorted(blocks, key=lambda b: (y_center(b), b['bbox'][0]))
+
+        merged = []
+        used = [False] * len(sorted_blocks)
+
+        for i, blk in enumerate(sorted_blocks):
+            if used[i]:
+                continue
+
+            cur_bbox = list(blk['bbox'])
+            cur_text = blk['text']
+            cur_score = blk['score']
+            h_i = cur_bbox[3] - cur_bbox[1]
+            yc_i = y_center(blk)
+
+            for j in range(i + 1, len(sorted_blocks)):
+                if used[j]:
+                    continue
+                cand = sorted_blocks[j]
+                c_bbox = cand['bbox']
+                h_j = c_bbox[3] - c_bbox[1]
+                yc_j = y_center(cand)
+
+                h_ref = max(h_i, h_j, 1)
+
+                # 같은 줄 판단: y 중심 거리 < 블록 높이 60%
+                if abs(yc_i - yc_j) > h_ref * 0.6:
+                    break  # y 기준 정렬이므로 이후 블록은 더 멀다
+
+                # 수평 간격: 현재 블록 오른쪽 끝 ~ 후보 블록 왼쪽 시작
+                gap = c_bbox[0] - cur_bbox[2]
+
+                # 간격이 음수(겹침)이거나 글자 높이 1.2배 이내일 때 병합
+                if -h_ref * 0.3 <= gap <= h_ref * 1.2:
+                    # 두 블록 사이에 의미 있는 공백이 있으면 스페이스 삽입
+                    sep = ' ' if gap > h_ref * 0.3 else ''
+                    cur_text = cur_text + sep + cand['text']
+                    cur_bbox[2] = max(cur_bbox[2], c_bbox[2])
+                    cur_bbox[1] = min(cur_bbox[1], c_bbox[1])
+                    cur_bbox[3] = max(cur_bbox[3], c_bbox[3])
+                    cur_score = min(cur_score, cand['score'])
+                    used[j] = True
+
+            merged.append({'bbox': cur_bbox, 'text': cur_text, 'score': cur_score})
+
+        return merged
 
     @staticmethod
     def _polygon_to_bbox(polygon):

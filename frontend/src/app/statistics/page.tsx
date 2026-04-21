@@ -157,71 +157,44 @@ export default function StatisticsPage() {
                 ))}
               </div>
 
-              {/* Row: Trend chart */}
-              <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-lg font-semibold text-text-primary-light dark:text-text-primary-dark">처리량 추이</h2>
-                  <div className="flex gap-1 bg-background-light dark:bg-background-dark rounded-lg p-1">
-                    {(['daily', 'weekly', 'monthly'] as Period[]).map(p => (
-                      <button key={p} onClick={() => setPeriod(p)}
-                        className={`px-3 py-1.5 text-sm rounded-md transition-all ${
-                          period === p ? 'bg-primary text-white font-semibold'
-                            : 'text-text-secondary-light dark:text-text-secondary-dark hover:text-text-primary-light dark:hover:text-text-primary-dark'
-                        }`}>
-                        {p === 'daily' ? '일별' : p === 'weekly' ? '주별' : '월별'}
-                      </button>
-                    ))}
-                  </div>
+              {/* 세션별 작업 현황 */}
+              <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark overflow-hidden">
+                <div className="px-6 py-4 border-b border-border-light dark:border-border-dark">
+                  <h2 className="text-lg font-semibold text-text-primary-light dark:text-text-primary-dark">세션별 작업 현황</h2>
                 </div>
-                <div className="flex gap-4 mb-4">
-                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-primary" /><span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">완료</span></div>
-                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-red-400" /><span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">실패</span></div>
-                </div>
-                {trend ? (
+                {sessions.length > 0 ? (
                   <div className="overflow-x-auto">
-                    <div style={{ minWidth: trend.labels.length * 52 }}>
-                      <div className="relative" style={{ height: BAR_HEIGHT + 24 }}>
-                        {[0, 0.25, 0.5, 0.75, 1].map(ratio => (
-                          <div key={ratio} className="absolute left-0 right-0 border-t border-border-light dark:border-border-dark" style={{ bottom: ratio * BAR_HEIGHT + 24 }}>
-                            <span className="absolute -top-2.5 -left-1 text-text-secondary-light dark:text-text-secondary-dark pr-1" style={{ fontSize: 10 }}>
-                              {ratio === 0 ? '' : Math.round(maxVal * ratio)}
-                            </span>
-                          </div>
-                        ))}
-                        <div className="absolute bottom-6 left-6 right-0 flex items-end gap-1" style={{ height: BAR_HEIGHT }}>
-                          {trend.labels.map((_label, i) => {
-                            const ch = Math.round((trend.completed[i] / maxVal) * BAR_HEIGHT)
-                            const fh = Math.round((trend.failed[i] / maxVal) * BAR_HEIGHT)
-                            return (
-                              <div key={i} className="flex-1 flex flex-col items-center gap-0.5 group relative">
-                                <div className="absolute bottom-full mb-1 hidden group-hover:flex flex-col items-center z-10">
-                                  <div className="bg-gray-800 dark:bg-gray-700 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
-                                    완료 {trend.completed[i]} / 실패 {trend.failed[i]}
-                                  </div>
-                                  <div className="w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800 dark:border-t-gray-700" />
-                                </div>
-                                <div className="w-full flex items-end gap-0.5" style={{ height: BAR_HEIGHT }}>
-                                  <div className="flex-1 bg-primary/80 hover:bg-primary rounded-t transition-all duration-300" style={{ height: ch || 1 }} />
-                                  <div className="flex-1 bg-red-400/80 hover:bg-red-400 rounded-t transition-all duration-300" style={{ height: fh || (trend.failed[i] > 0 ? 1 : 0) }} />
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                        <div className="absolute bottom-0 left-6 right-0 flex gap-1" style={{ height: 20 }}>
-                          {trend.labels.map((label, i) => (
-                            <div key={i} className="flex-1 text-center overflow-hidden" style={{ fontSize: 9 }}>
-                              <span className="text-text-secondary-light dark:text-text-secondary-dark truncate block">{label}</span>
-                            </div>
+                    <table className="w-full">
+                      <thead className="bg-background-light dark:bg-background-dark">
+                        <tr>
+                          {['세션명', '총 문서', '완료', '실패', '완료율', '마지막 작업'].map(h => (
+                            <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-text-secondary-light dark:text-text-secondary-dark uppercase tracking-wider">{h}</th>
                           ))}
-                        </div>
-                      </div>
-                    </div>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border-light dark:divide-border-dark">
+                        {sessions.map(s => (
+                          <tr key={s.session_id} className="hover:bg-background-light dark:hover:bg-background-dark transition-colors">
+                            <td className="px-5 py-3 text-sm font-medium text-text-primary-light dark:text-text-primary-dark">{s.session_name}</td>
+                            <td className="px-5 py-3 text-sm text-text-secondary-light dark:text-text-secondary-dark">{s.total}</td>
+                            <td className="px-5 py-3 text-sm text-green-600 dark:text-green-400 font-medium">{s.completed}</td>
+                            <td className="px-5 py-3 text-sm text-red-500 dark:text-red-400 font-medium">{s.failed}</td>
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden min-w-[60px]">
+                                  <div className="h-full rounded-full bg-green-500 transition-all duration-500" style={{ width: `${s.completion_rate}%` }} />
+                                </div>
+                                <span className="text-xs text-text-secondary-light dark:text-text-secondary-dark whitespace-nowrap">{s.completion_rate}%</span>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3 text-sm text-text-secondary-light dark:text-text-secondary-dark whitespace-nowrap">{formatDate(s.last_activity)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center" style={{ height: BAR_HEIGHT }}>
-                    <span className="material-symbols-outlined animate-spin text-primary text-3xl">progress_activity</span>
-                  </div>
+                  <div className="p-16 text-center text-text-secondary-light dark:text-text-secondary-dark">세션 데이터 없음</div>
                 )}
               </div>
 
@@ -419,6 +392,74 @@ export default function StatisticsPage() {
                   </div>
                 ) : (
                   <div className="p-16 text-center text-text-secondary-light dark:text-text-secondary-dark">세션 데이터 없음</div>
+                )}
+              </div>
+
+              {/* Row: Trend chart */}
+              <div className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg font-semibold text-text-primary-light dark:text-text-primary-dark">처리량 추이</h2>
+                  <div className="flex gap-1 bg-background-light dark:bg-background-dark rounded-lg p-1">
+                    {(['daily', 'weekly', 'monthly'] as Period[]).map(p => (
+                      <button key={p} onClick={() => setPeriod(p)}
+                        className={`px-3 py-1.5 text-sm rounded-md transition-all ${
+                          period === p ? 'bg-primary text-white font-semibold'
+                            : 'text-text-secondary-light dark:text-text-secondary-dark hover:text-text-primary-light dark:hover:text-text-primary-dark'
+                        }`}>
+                        {p === 'daily' ? '일별' : p === 'weekly' ? '주별' : '월별'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-4 mb-4">
+                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-primary" /><span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">완료</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-red-400" /><span className="text-xs text-text-secondary-light dark:text-text-secondary-dark">실패</span></div>
+                </div>
+                {trend ? (
+                  <div className="overflow-x-auto">
+                    <div style={{ minWidth: trend.labels.length * 52 }}>
+                      <div className="relative" style={{ height: BAR_HEIGHT + 24 }}>
+                        {[0, 0.25, 0.5, 0.75, 1].map(ratio => (
+                          <div key={ratio} className="absolute left-0 right-0 border-t border-border-light dark:border-border-dark" style={{ bottom: ratio * BAR_HEIGHT + 24 }}>
+                            <span className="absolute -top-2.5 -left-1 text-text-secondary-light dark:text-text-secondary-dark pr-1" style={{ fontSize: 10 }}>
+                              {ratio === 0 ? '' : Math.round(maxVal * ratio)}
+                            </span>
+                          </div>
+                        ))}
+                        <div className="absolute bottom-6 left-6 right-0 flex items-end gap-1" style={{ height: BAR_HEIGHT }}>
+                          {trend.labels.map((_label, i) => {
+                            const ch = Math.round((trend.completed[i] / maxVal) * BAR_HEIGHT)
+                            const fh = Math.round((trend.failed[i] / maxVal) * BAR_HEIGHT)
+                            return (
+                              <div key={i} className="flex-1 flex flex-col items-center gap-0.5 group relative">
+                                <div className="absolute bottom-full mb-1 hidden group-hover:flex flex-col items-center z-10">
+                                  <div className="bg-gray-800 dark:bg-gray-700 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
+                                    완료 {trend.completed[i]} / 실패 {trend.failed[i]}
+                                  </div>
+                                  <div className="w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800 dark:border-t-gray-700" />
+                                </div>
+                                <div className="w-full flex items-end gap-0.5" style={{ height: BAR_HEIGHT }}>
+                                  <div className="flex-1 bg-primary/80 hover:bg-primary rounded-t transition-all duration-300" style={{ height: ch || 1 }} />
+                                  <div className="flex-1 bg-red-400/80 hover:bg-red-400 rounded-t transition-all duration-300" style={{ height: fh || (trend.failed[i] > 0 ? 1 : 0) }} />
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <div className="absolute bottom-0 left-6 right-0 flex gap-1" style={{ height: 20 }}>
+                          {trend.labels.map((label, i) => (
+                            <div key={i} className="flex-1 text-center overflow-hidden" style={{ fontSize: 9 }}>
+                              <span className="text-text-secondary-light dark:text-text-secondary-dark truncate block">{label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center" style={{ height: BAR_HEIGHT }}>
+                    <span className="material-symbols-outlined animate-spin text-primary text-3xl">progress_activity</span>
+                  </div>
                 )}
               </div>
 

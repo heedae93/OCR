@@ -57,3 +57,7 @@ langchain-community>=0.3.0
 # ── Celery + Redis (OCR 작업 큐) ──
 celery[redis]>=5.3.0
 redis>=5.0.0
+pymysql==1.1.2
+
+# ── KoBERT NER ──
+sentencepiece>=0.1.96

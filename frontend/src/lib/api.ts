@@ -65,6 +65,10 @@ export const getProcessedFileUrl = (jobId: string): string => {
   return `${API_URL}/api/files/processed/${jobId}.pdf`
 }
 
+export const getMaskedFileUrl = (jobId: string): string => {
+  return `${API_URL}/api/files/processed/${jobId}_masked.pdf`
+}
+
 export const getRawFileUrl = (jobId: string, filename: string): string => {
   return `${API_URL}/api/files/raw/${jobId}/${filename}`
 }

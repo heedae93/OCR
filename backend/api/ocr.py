@@ -740,6 +740,7 @@ def process_job_task(job_id: str):
                 # Use per-GPU lock to prevent concurrent access to the same model
                 with gpu_predict_locks[gpu_id]:
                     ocr_results = page_ocr_model.predict(image_path)
+                structured_result = getattr(page_ocr_model, 'structured_result', None) or {}
                 ocr_elapsed = time.time() - ocr_start
 
                 if not ocr_results:
@@ -748,7 +749,8 @@ def process_job_task(job_id: str):
                 else:
                     logger.info(f"[Page {page_num}] OCR completed in {ocr_elapsed:.2f}s ({len(ocr_results)} text blocks)")
 
-                layout_regions = []
+                layout_regions = structured_result.get('layout_info', {}).get('regions', []) or []
+                table_regions = structured_result.get('layout_info', {}).get('tables', []) or []
                 column_info = {
                     'is_double_column': False,
                     'column_boundary': None,
@@ -756,11 +758,10 @@ def process_job_task(job_id: str):
                 }
 
                 if ocr_results:
-                    layout_regions = []
                     layout_cache_enabled = getattr(Config, 'LAYOUT_CACHE_ENABLED', True)
                     layout_cache_path = Config.PROCESSED_DIR / f"{job_id}_page_{page_num:04d}_layout.json"
 
-                    if Config.USE_LAYOUT_DETECTION:
+                    if Config.USE_LAYOUT_DETECTION and not layout_regions:
                         cached = False
                         if layout_cache_enabled and layout_cache_path.exists():
                             try:
@@ -821,7 +822,10 @@ def process_job_task(job_id: str):
                     "column_confidence": column_info.get('confidence'),
                     "layout_type": column_info.get('layout_type', 'single'),
                     "layout_regions": len(layout_regions),
-                    "layout_counts": dict(layout_counts)
+                    "layout_counts": dict(layout_counts),
+                    "table_count": len(table_regions),
+                    "table_model": Config.OCR_PPSTRUCTURE_TABLE_MODEL if table_regions else None,
+                    "table_regions": table_regions,
                 }
 
                 ocr_page = OCRPage(
@@ -833,7 +837,7 @@ def process_job_task(job_id: str):
                             text=r['text'],
                             bbox=r['bbox'],
                             confidence=r.get('score'),
-                            char_confidences=r.get('char_confidences'),  # 문자별 CTC confidence
+                            char_confidences=r.get('char_confidences'),
                             column=r.get('column'),
                             layout_type=r.get('layout_type'),
                             reading_order=r.get('reading_order')
@@ -879,7 +883,6 @@ def process_job_task(job_id: str):
                 if _is_job_cancelled(job_id):
                     logger.info(f"[Job {job_id}] Cancellation detected, stopping processing")
                     cancelled = True
-                    # Cancel remaining futures
                     for f in future_map:
                         f.cancel()
                     break
@@ -990,10 +993,8 @@ def process_job_task(job_id: str):
         output_pdf = Config.PROCESSED_DIR / f"{job_id}.pdf"
 
         if len(page_pdfs) == 1:
-            # Single page - just copy
             shutil.copy2(page_pdfs[0], output_pdf)
         else:
-            # Multi-page - merge PDFs
             from PyPDF2 import PdfMerger
             merger = PdfMerger()
             for pdf_path in page_pdfs:
@@ -1024,22 +1025,19 @@ def process_job_task(job_id: str):
             pages=ocr_results_all,
             layout_summary=layout_summary
         )
-        # OCR result JSON 저장
         ocr_json_path = Config.PROCESSED_DIR / f"{job_id}_ocr.json"
         with open(ocr_json_path, 'w', encoding='utf-8') as f:
             json.dump(ocr_result.dict(), f, ensure_ascii=False, indent=2)
 
-        # PII 추출(OCR 완료 직후 자동 실행)
+        # PII 추출 및 마스킹 PDF 생성 (OCR 완료 직후 자동 실행)
         try:
             from core.pii_extractor import extract_pii_from_pages, mask_value
+            from api.masking import _apply_masking
 
             ocr_pages = ocr_result.dict()["pages"]
-
             job_manager.update_job(job_id, message="개인정보 감지 중...")
 
-            # 라인별 bbox와 함께 PII 추출 (1차 정규식 → 2차 병합 → 3차 LLM 보조)
             pii_boxes = extract_pii_from_pages(ocr_pages)
-
             for box in pii_boxes:
                 box["masked_value"] = mask_value(box["type"], box["value"])
 
@@ -1048,23 +1046,28 @@ def process_job_task(job_id: str):
                 for b in pii_boxes
             ]
 
-            pii_result = {
-                "job_id": job_id,
-                "pii_items": pii_items,
-                "masked_boxes": pii_boxes,
-            }
+            pii_result = {"job_id": job_id, "pii_items": pii_items, "masked_boxes": pii_boxes}
             pii_json_path = Config.PROCESSED_DIR / f"{job_id}_pii.json"
             with open(pii_json_path, 'w', encoding='utf-8') as f:
                 json.dump(pii_result, f, ensure_ascii=False, indent=2)
 
-            logger.info(f"[{job_id}] PII 추출 완료 : {len(pii_items)}개")
+            logger.info(f"[{job_id}] PII 추출 완료: {len(pii_items)}개")
 
-        except Exception as e:
-            # PII 실패해도 OCR결과는 살림
-            logger.error(f"[{job_id}] PII 추출 실패 : {e}")
+            # 마스킹 PDF 생성 및 저장
+            if output_pdf.exists():
+                boxes_with_bbox = [
+                    b for b in pii_boxes
+                    if b.get("bbox") and b.get("masked_value") != b.get("value")
+                ]
+                masked_pdf_bytes = _apply_masking(output_pdf, boxes_with_bbox, ocr_result.dict())
+                with open(Config.PROCESSED_DIR / f"{job_id}_masked.pdf", "wb") as f:
+                    f.write(masked_pdf_bytes)
+                logger.info(f"[{job_id}] 마스킹 PDF 생성 완료")
 
+        except Exception as pii_e:
+            logger.error(f"[{job_id}] PII/마스킹 처리 실패: {pii_e}")
 
-        # Update job as completed (add timestamp to prevent caching)
+        # Update job as completed
         timestamp = int(time.time() * 1000)
         pdf_url = f"/files/processed/{job_id}.pdf?v={timestamp}"
         job_manager.update_job(
@@ -1094,9 +1097,7 @@ def process_job_task(job_id: str):
             status=JobStatus.FAILED,
             message=str(e)
         )
-
     finally:
-        # Cleanup temp files
         cleanup_temp_files(temp_files)
 
 

@@ -1393,6 +1393,8 @@ class CustomOCRModel:
         self.recognition_model_dir = recognition_model_dir
         self.use_gpu = use_gpu
         self.logger = logging.getLogger(__name__)
+        self.engine_type = (CONFIG.get('OCR_ENGINE') or 'pp_structure').lower()
+        self.structured_result = None
         self.ocr = self._create_ocr_model()
 
     @classmethod
@@ -1406,6 +1408,17 @@ class CustomOCRModel:
         """OCR 모델 생성 (성능 최적화)"""
         device_name = "GPU" if self.use_gpu else "CPU"
         self.logger.info(f"모델 타입: {ocr_model_type}, 디바이스: {device_name}")
+
+        if self.engine_type in {"pp_structure", "pp-structure", "ppstructure"}:
+            from core.pp_structure_engine import PPStructureEngine
+
+            self.logger.info(
+                "Using PP-Structure engine (layout=%s, table=%s, table_model=%s)",
+                CONFIG.get('PPSTRUCTURE_LAYOUT_MODEL'),
+                CONFIG.get('PPSTRUCTURE_USE_TABLE_RECOGNITION'),
+                CONFIG.get('PPSTRUCTURE_TABLE_MODEL'),
+            )
+            return PPStructureEngine(use_custom_recognition=bool(self.recognition_model_dir))
 
         gpu_device_id = _resolve_gpu_device_id() if self.use_gpu else None
         _set_cuda_device_env(gpu_device_id, self.use_gpu)
@@ -1697,6 +1710,35 @@ class CustomOCRModel:
             raise RuntimeError("OCR 모델이 초기화되지 않았습니다!")
 
         temp_paths = set()
+        self.structured_result = None
+
+        if self.engine_type in {"pp_structure", "pp-structure", "ppstructure"}:
+            try:
+                t0 = time.time()
+                preprocessed_path = self._apply_preprocessing(image_path)
+                if preprocessed_path != image_path:
+                    temp_paths.add(preprocessed_path)
+
+                standardized_image_path = self._standardize_image_format(preprocessed_path)
+                if standardized_image_path != preprocessed_path:
+                    temp_paths.add(standardized_image_path)
+
+                self.structured_result = self.ocr.analyze(standardized_image_path) or {}
+                ocr_blocks = self.structured_result.get('ocr_blocks', [])
+                self.logger.info(
+                    "PP-Structure analysis completed in %.2fs (%d text blocks, %d tables)",
+                    time.time() - t0,
+                    len(ocr_blocks),
+                    len(self.structured_result.get('layout_info', {}).get('tables', [])),
+                )
+                return ocr_blocks if ocr_blocks else None
+            finally:
+                for temp_path in temp_paths:
+                    try:
+                        if temp_path and os.path.exists(temp_path):
+                            os.unlink(temp_path)
+                    except Exception as cleanup_error:
+                        self.logger.debug(f"?꾩떆 ?뚯씪 ?뺣━ ?ㅽ뙣 ({temp_path}): {cleanup_error}")
 
         # 문자별 confidence 캡처를 위한 누적 모드 시작
         try:

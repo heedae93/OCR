@@ -20,10 +20,11 @@ engine_args = {"echo": False, "pool_pre_ping": True}
 if DATABASE_URL.startswith("sqlite"):
     engine_args["connect_args"] = {"check_same_thread": False}
 else:
-    engine_args["pool_size"] = 5        # 기본 유지 연결 수
-    engine_args["max_overflow"] = 10    # 최대 추가 연결 수 (총 15개)
-    engine_args["pool_timeout"] = 30    # 연결 대기 타임아웃 (초)
-    engine_args["pool_recycle"] = 1800  # 30분마다 연결 갱신
+    # PostgreSQL: 커넥션 풀 제한 (too many clients 방지)
+    engine_args["pool_recycle"] = 1800   # 30분마다 커넥션 갱신
+    engine_args["pool_size"] = 5         # 최대 풀 크기
+    engine_args["max_overflow"] = 5      # 초과 허용 커넥션 수
+    engine_args["pool_timeout"] = 30     # 커넥션 대기 타임아웃(초)
 
 engine = create_engine(DATABASE_URL, **engine_args)
 

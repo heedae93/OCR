@@ -52,6 +52,28 @@ class Config:
     OCR_MODEL_DIR = MODELS_DIR / "best_0828"
     OCR_CHAR_DICT_PATH: Optional[Path] = None
     OCR_ENABLE_LINE_MERGE = False
+    OCR_ENGINE = "pp_structure"
+    OCR_PPSTRUCTURE_LAYOUT_MODEL = "PP-DocLayout-L"
+    OCR_PPSTRUCTURE_REC_MODEL = "PP-OCRv5_server_rec"
+    OCR_PPSTRUCTURE_TABLE_MODEL = "SLANet_plus"
+    OCR_PPSTRUCTURE_WIRELESS_TABLE_MODEL = "SLANet"
+    OCR_PPSTRUCTURE_USE_TABLE_RECOGNITION = True
+
+    # Tiling (chunking) settings
+    OCR_TILING_ENABLED = True
+    OCR_TILE_SIZE = 1500
+    OCR_TILE_OVERLAP = 150
+    OCR_TILE_NMS_IOU = 0.3
+
+    # Table Transformer settings
+    # backend: slanet | table_transformer | hybrid
+    OCR_TABLE_BACKEND = "hybrid"
+    TABLE_TRANSFORMER_DET_MODEL = "microsoft/table-transformer-detection"
+    TABLE_TRANSFORMER_STR_MODEL = (
+        "microsoft/table-transformer-structure-recognition-v1.1-all"
+    )
+    TABLE_TRANSFORMER_DET_THRESHOLD = 0.9
+    TABLE_TRANSFORMER_STR_THRESHOLD = 0.6
 
     # Reading order settings
     USE_SMART_READING_ORDER = True
@@ -149,6 +171,35 @@ class Config:
             cls.OCR_REC_BATCH_NUM = ocr.get("rec_batch_num", cls.OCR_REC_BATCH_NUM)
             cls.OCR_DETECTION_LIMIT = ocr.get("detection_limit_side_len", cls.OCR_DETECTION_LIMIT)
             cls.OCR_ENABLE_LINE_MERGE = ocr.get("enable_line_merge", cls.OCR_ENABLE_LINE_MERGE)
+            cls.OCR_ENGINE = ocr.get("engine", cls.OCR_ENGINE)
+            cls.OCR_PPSTRUCTURE_LAYOUT_MODEL = ocr.get("ppstructure_layout_model", cls.OCR_PPSTRUCTURE_LAYOUT_MODEL)
+            cls.OCR_PPSTRUCTURE_REC_MODEL = ocr.get("ppstructure_recognition_model", cls.OCR_PPSTRUCTURE_REC_MODEL)
+            cls.OCR_PPSTRUCTURE_TABLE_MODEL = ocr.get("table_model_name", cls.OCR_PPSTRUCTURE_TABLE_MODEL)
+            cls.OCR_PPSTRUCTURE_WIRELESS_TABLE_MODEL = ocr.get(
+                "wireless_table_model_name",
+                cls.OCR_PPSTRUCTURE_WIRELESS_TABLE_MODEL,
+            )
+            cls.OCR_PPSTRUCTURE_USE_TABLE_RECOGNITION = ocr.get(
+                "use_table_recognition",
+                cls.OCR_PPSTRUCTURE_USE_TABLE_RECOGNITION,
+            )
+            cls.OCR_TABLE_BACKEND = ocr.get(
+                "table_recognition_backend", cls.OCR_TABLE_BACKEND
+            )
+            if "table_transformer" in ocr:
+                tt = ocr["table_transformer"]
+                cls.TABLE_TRANSFORMER_DET_MODEL = tt.get(
+                    "detection_model", cls.TABLE_TRANSFORMER_DET_MODEL
+                )
+                cls.TABLE_TRANSFORMER_STR_MODEL = tt.get(
+                    "structure_model", cls.TABLE_TRANSFORMER_STR_MODEL
+                )
+                cls.TABLE_TRANSFORMER_DET_THRESHOLD = tt.get(
+                    "detection_threshold", cls.TABLE_TRANSFORMER_DET_THRESHOLD
+                )
+                cls.TABLE_TRANSFORMER_STR_THRESHOLD = tt.get(
+                    "structure_threshold", cls.TABLE_TRANSFORMER_STR_THRESHOLD
+                )
 
             if "recognition_model_dir" in ocr:
                 model_dir_value = ocr["recognition_model_dir"]
@@ -159,6 +210,14 @@ class Config:
                 char_path = ocr["char_dict_path"]
                 if char_path:
                     cls.OCR_CHAR_DICT_PATH = cls._resolve_path(char_path)
+
+            # Tiling settings
+            if "tiling" in ocr:
+                tiling = ocr["tiling"]
+                cls.OCR_TILING_ENABLED = tiling.get("enabled", cls.OCR_TILING_ENABLED)
+                cls.OCR_TILE_SIZE = tiling.get("tile_size", cls.OCR_TILE_SIZE)
+                cls.OCR_TILE_OVERLAP = tiling.get("overlap", cls.OCR_TILE_OVERLAP)
+                cls.OCR_TILE_NMS_IOU = tiling.get("nms_iou_threshold", cls.OCR_TILE_NMS_IOU)
 
             # Reading order settings
             cls.USE_SMART_READING_ORDER = ocr.get("use_smart_reading_order", cls.USE_SMART_READING_ORDER)
