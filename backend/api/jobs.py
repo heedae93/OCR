@@ -128,6 +128,9 @@ async def delete_job(job_id: str, db: Session = Depends(get_db)):
 
         # Delete associated files
         from pathlib import Path
+        import shutil
+        from config import Config
+
         files_to_delete = [
             job.raw_file_path,
             job.pdf_file_path,
@@ -145,6 +148,32 @@ async def delete_job(job_id: str, db: Session = Depends(get_db)):
                         deleted_files += 1
                 except Exception as e:
                     logger.warning(f"Failed to delete file {file_path}: {e}")
+
+        # 관련 디렉토리 삭제 (raw 업로드 폴더, pages 폴더)
+        for dir_path in [
+            Config.RAW_DIR / job_id,
+            Config.PROCESSED_DIR / f"{job_id}_pages",
+        ]:
+            try:
+                if dir_path.exists():
+                    shutil.rmtree(dir_path)
+                    deleted_files += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete directory {dir_path}: {e}")
+
+        # 추가 파일들 (pii, masked, smart_layers, editor_state 등)
+        for extra in [
+            Config.PROCESSED_DIR / f"{job_id}_pii.json",
+            Config.PROCESSED_DIR / f"{job_id}_masked.pdf",
+            Config.PROCESSED_DIR / f"{job_id}_smart_layers.json",
+            Config.PROCESSED_DIR / f"{job_id}_editor_state.json",
+            Config.PROCESSED_DIR / f"{job_id}_final.pdf",
+        ]:
+            try:
+                if extra.exists():
+                    extra.unlink()
+            except Exception as e:
+                logger.warning(f"Failed to delete extra file {extra}: {e}")
 
         # Delete from database (cascade will delete pages)
         db.delete(job)

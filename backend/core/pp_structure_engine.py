@@ -245,13 +245,13 @@ class PPStructureEngine:
             pipeline_params = {
                 # Layout detection - use high-accuracy model
                 "layout_detection_model_name": self.config.OCR_PPSTRUCTURE_LAYOUT_MODEL,
-                "layout_threshold": 0.5,  # Confidence threshold for layout detection
+                "layout_threshold": 0.3,  # 0.5 → 0.3: 더 많은 레이아웃 영역 감지
 
                 # Text detection - use server model for better accuracy
                 "text_detection_model_name": "PP-OCRv5_server_det",
                 "text_det_limit_side_len": self.config.OCR_DETECTION_LIMIT,
-                "text_det_thresh": 0.3,
-                "text_det_box_thresh": 0.6,
+                "text_det_thresh": 0.2,       # 0.3 → 0.2: 배경색 영역·작은 글씨 감지 향상
+                "text_det_box_thresh": 0.4,   # 0.6 → 0.4: 낮은 신뢰도 박스도 유지
 
                 # Text recognition - use custom model if available
                 "text_recognition_batch_size": self.config.OCR_REC_BATCH_NUM,
@@ -450,7 +450,7 @@ class PPStructureEngine:
         tile_size = getattr(self.config, "OCR_TILE_SIZE", 1500)
         overlap = getattr(self.config, "OCR_TILE_OVERLAP", 150)
         nms_iou = getattr(self.config, "OCR_TILE_NMS_IOU", 0.3)
-        score_thresh = 0.3
+        score_thresh = 0.2  # 0.3 → 0.2: 낮은 신뢰도 텍스트(배경색 영역 등)도 포함
 
         try:
             from PIL import Image
@@ -691,8 +691,7 @@ class PPStructureEngine:
                         score = rec_scores[idx] if idx < len(rec_scores) else 0.0
 
                         # Skip empty or low-confidence results
-                        # Lowered threshold from 0.5 to 0.3 to capture more bottom text
-                        if not text or not text.strip() or score < 0.3:
+                        if not text or not text.strip() or score < 0.2:
                             filtered_count += 1
                             if filtered_count <= 5 or idx >= len(dt_polys) - 5:
                                 logger.debug(f"Filtered box {idx}: score={score:.3f}, text='{text[:30]}'")

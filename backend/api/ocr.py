@@ -29,6 +29,7 @@ from core.reading_order_sorter import ReadingOrderSorter
 from utils.job_manager import JobManager
 from utils.file_utils import save_uploaded_file, generate_unique_id, cleanup_temp_files
 from utils.smart_layers import apply_smart_layers_to_image
+from utils.ocr_storage import resolve_ocr_json_path
 from database import SessionLocal, Job as DBJob, DownloadHistory, FileVersion
 
 # Import pdf_gen pipeline components
@@ -341,9 +342,10 @@ def _merge_ocr_lines(blocks: List[Dict], y_threshold: float = 6.0, x_gap: float 
 
 @router.post("/upload")
 def upload_file(
-    file: UploadFile = File(...), 
+    file: UploadFile = File(...),
     user_id: str = Config.DEFAULT_USER_ID,
-    doc_type: Optional[str] = Query(None)  # 카테고리 추가
+    doc_type: Optional[str] = Query(None),
+    session_id: str = "default"
 ):
     """Upload a file for OCR processing"""
     try:
@@ -389,10 +391,11 @@ def upload_file(
         if db_saved:
             logger.info(f"Job {job_id} successfully saved to database")
 
-            # Add to default session
-            session_added = add_job_to_session(job_id, "default")
+            # Add to specified session (or default)
+            target_session = session_id if session_id else "default"
+            session_added = add_job_to_session(job_id, target_session)
             if session_added:
-                logger.info(f"Job {job_id} added to default session")
+                logger.info(f"Job {job_id} added to session {target_session}")
         else:
             logger.error(f"Failed to save job {job_id} to database")
 
@@ -550,21 +553,45 @@ def cancel_job(job_id: str):
     """Cancel an OCR processing job"""
     try:
         job = job_manager.get_job(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
 
-        if job.status != JobStatus.PROCESSING:
+        # job_manager가 재시작 등으로 비어있을 경우 DB에서 복원
+        if not job:
+            db = SessionLocal()
+            try:
+                db_job = db.query(DBJob).filter_by(job_id=job_id).first()
+                if db_job:
+                    job = job_manager.create_job(
+                        job_id=job_id,
+                        filename=db_job.original_filename,
+                        user_id="restored"
+                    )
+                    # DB 상태 반영
+                    if db_job.status == 'processing':
+                        job_manager.update_job(job_id, status=JobStatus.PROCESSING)
+                    logger.info(f"Restored job from DB for cancel: {job_id}")
+                else:
+                    raise HTTPException(status_code=404, detail="Job not found")
+            finally:
+                db.close()
+
+        if job.status not in [JobStatus.PROCESSING, JobStatus.QUEUED]:
             raise HTTPException(status_code=400, detail="Job is not processing")
 
-        # 파일 기반 취소 플래그 (Worker 프로세스에서도 감지 가능)
+        # 파일 기반 취소 플래그 (Worker/Celery 프로세스에서도 감지 가능)
         _set_cancel_flag(job_id)
-        job_manager.cancel_job(job_id)  # 메모리 기반도 함께 (같은 프로세스 폴백)
+        # 메모리 기반 취소도 병행
+        job_in_memory = job_id in job_manager.jobs
+        job_manager.cancelled_jobs.add(job_id)
 
-        return {
-            "job_id": job_id,
-            "status": "cancelling",
-            "message": "Cancellation requested"
-        }
+        # 스레드가 없거나 서버 재시작 후 복원된 경우 → 즉시 CANCELLED로 강제 전환
+        if not job_in_memory or job_id not in [j for j in job_manager.jobs if job_manager.jobs[j].status == JobStatus.PROCESSING]:
+            job_manager.update_job(job_id, status=JobStatus.CANCELLED, message="중단됨")
+            job_manager.clear_cancelled(job_id)
+            logger.info(f"Job force-cancelled (no active thread): {job_id}")
+            return {"job_id": job_id, "status": "cancelled", "message": "중단되었습니다"}
+
+        logger.info(f"Cancellation signal sent to active thread: {job_id}")
+        return {"job_id": job_id, "status": "cancelling", "message": "중단 요청됨"}
 
     except HTTPException:
         raise
@@ -789,8 +816,9 @@ def process_job_task(job_id: str):
                                 logger.warning(f"Layout detection failed on page {page_num}: {layout_exc}")
                                 layout_regions = []
 
+                    sorter = get_reading_order_sorter()
+
                     if Config.USE_SMART_READING_ORDER:
-                        sorter = get_reading_order_sorter()
                         sorted_blocks, detected_column_info = sorter.sort_reading_order(
                             ocr_results,
                             page_width=width,
@@ -799,8 +827,12 @@ def process_job_task(job_id: str):
                         )
                         column_info = detected_column_info or column_info
                         ocr_results = sorter.add_column_labels(sorted_blocks, column_info, width)
-                        for idx, block in enumerate(ocr_results):
-                            block['reading_order'] = idx
+
+                    # Text-layer/UI numbering follows visual order:
+                    # left-to-right within a row, then top-to-bottom.
+                    ocr_results = sorter.sort_visual_left_to_right_top_to_bottom(ocr_results)
+                    for idx, block in enumerate(ocr_results):
+                        block['reading_order'] = idx
 
                     for block in ocr_results:
                         block.setdefault('layout_type', 'text')
@@ -1480,10 +1512,21 @@ async def get_job_status(job_id: str):
 @router.get("/ocr-results/{job_id}")
 async def get_ocr_results(job_id: str):
     """Get OCR results for a job"""
-    ocr_json_path = Config.PROCESSED_DIR / f"{job_id}_ocr.json"
+    ocr_json_path = resolve_ocr_json_path(job_id)
 
-    if not ocr_json_path.exists():
-        raise HTTPException(status_code=404, detail="OCR results not found")
+    if not ocr_json_path:
+        db = SessionLocal()
+        try:
+            db_job = db.query(DBJob).filter_by(job_id=job_id).first()
+        finally:
+            db.close()
+
+        if db_job:
+            raise HTTPException(
+                status_code=404,
+                detail="OCR result file is missing for this job",
+            )
+        raise HTTPException(status_code=404, detail="Job not found")
 
     try:
         with open(ocr_json_path, 'r', encoding='utf-8') as f:
@@ -1497,9 +1540,9 @@ async def get_ocr_results(job_id: str):
 @router.get("/download-json/{job_id}")
 async def download_json(job_id: str):
     """Download OCR results as JSON file"""
-    ocr_json_path = Config.PROCESSED_DIR / f"{job_id}_ocr.json"
+    ocr_json_path = resolve_ocr_json_path(job_id)
 
-    if not ocr_json_path.exists():
+    if not ocr_json_path:
         raise HTTPException(status_code=404, detail="OCR results not found")
 
     return FileResponse(
@@ -1523,8 +1566,8 @@ async def save_ocr_edits(job_id: str, payload: dict):
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
 
-        ocr_json_path = Config.PROCESSED_DIR / f"{job_id}_ocr.json"
-        if not ocr_json_path.exists():
+        ocr_json_path = resolve_ocr_json_path(job_id)
+        if not ocr_json_path:
             raise HTTPException(status_code=404, detail="OCR results not found")
 
         # Read current OCR results

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Sidebar from '@/components/Sidebar'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { API_BASE_URL } from '@/lib/api'
@@ -45,26 +45,35 @@ export default function JobsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [inProgressExpanded, setInProgressExpanded] = useState(false)
   const [inProgressSessionExpanded, setInProgressSessionExpanded] = useState<Record<string, boolean>>({})
+  const [reprocessingJobs, setReprocessingJobs] = useState<Set<string>>(new Set())
+  const [uploadingSession, setUploadingSession] = useState<string | null>(null)
+  const [, setUploadProgress] = useState<Record<string, number>>({})
+  const groupsRef = useRef<SessionGroup[]>([])
+
+  useEffect(() => {
+    groupsRef.current = groups
+  }, [groups])
 
   useEffect(() => {
     loadData()
     loadStatistics()
   }, [statusFilter])
 
-  // 처리 중인 작업이 있으면 3초마다 자동 새로고침
+  // 처리 중인 작업이 있으면 3초마다 자동 새로고침 (interval은 한 번만 생성)
   useEffect(() => {
-    const hasProcessing = groups.some(g => g.jobs.some(j => j.status === 'processing' || j.status === 'queued'))
-    if (!hasProcessing) return
     const timer = setInterval(() => {
-      loadData({ silent: true })
-      loadStatistics()
+      const hasProcessing = groupsRef.current.some(g => g.jobs.some(j => j.status === 'processing' || j.status === 'queued'))
+      if (hasProcessing) {
+        loadData(false)
+        loadStatistics()
+      }
     }, 3000)
     return () => clearInterval(timer)
-  }, [groups])
+  }, [])
 
-  const loadData = async ({ silent = false }: { silent?: boolean } = {}) => {
+  const loadData = async (showLoading = true) => {
     try {
-      if (!silent) setLoading(true)
+      if (showLoading) setLoading(true)
       const user = JSON.parse(localStorage.getItem('user') || '{}')
       const userId = user.user_id || ''
 
@@ -92,7 +101,8 @@ export default function JobsPage() {
         const key = sessionInfo ? sessionInfo.session_id : '__unassigned__'
         const name = sessionInfo ? sessionInfo.session_name : '세션 미지정'
         if (!groupMap[key]) {
-          groupMap[key] = { session_id: key, session_name: name, jobs: [], expanded: true }
+          const existing = groupsRef.current.find(g => g.session_id === key)
+          groupMap[key] = { session_id: key, session_name: name, jobs: [], expanded: existing ? existing.expanded : true }
         }
         groupMap[key].jobs.push(job)
       }
@@ -108,7 +118,7 @@ export default function JobsPage() {
     } catch (error) {
       console.error('Failed to load data:', error)
     } finally {
-      if (!silent) setLoading(false)
+      if (showLoading) setLoading(false)
     }
   }
 
@@ -127,13 +137,78 @@ export default function JobsPage() {
     setGroups(prev => prev.map(g => g.session_id === sessionId ? { ...g, expanded: !g.expanded } : g))
   }
 
+  const handleUpload = async (sessionId: string, files: FileList | null) => {
+    if (!files || files.length === 0) return
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    const userId = user.user_id || ''
+
+    for (const file of Array.from(files)) {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const uploadKey = `${sessionId}_${file.name}_${Date.now()}`
+      setUploadingSession(sessionId)
+      setUploadProgress(prev => ({ ...prev, [uploadKey]: 0 }))
+
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/api/upload?user_id=${encodeURIComponent(userId)}&session_id=${encodeURIComponent(sessionId)}`,
+          { method: 'POST', body: formData }
+        )
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          alert(`업로드 실패: ${err.detail || file.name}`)
+          continue
+        }
+        const { job_id } = await res.json()
+
+        // 업로드 완료 후 바로 OCR 처리 시작
+        await fetch(`${API_BASE_URL}/api/process/${job_id}`, { method: 'POST' })
+        setUploadProgress(prev => ({ ...prev, [uploadKey]: 100 }))
+      } catch (e) {
+        alert(`업로드 중 오류: ${file.name}`)
+      } finally {
+        setUploadProgress(prev => { const s = { ...prev }; delete s[uploadKey]; return s })
+      }
+    }
+
+    setUploadingSession(null)
+    loadData(false)
+    loadStatistics()
+  }
+
+  const handleReprocess = async (jobId: string) => {
+    if (!confirm('OCR을 다시 처리하시겠습니까?\n기존 결과가 초기화됩니다.')) return
+    setReprocessingJobs(prev => new Set(prev).add(jobId))
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/process/${jobId}`, { method: 'POST' })
+      if (response.ok) {
+        loadData(false)
+      } else {
+        alert('재처리 요청에 실패했습니다.')
+      }
+    } catch (error) {
+      console.error('Failed to reprocess job:', error)
+      alert('재처리 요청 중 오류가 발생했습니다.')
+    } finally {
+      setReprocessingJobs(prev => { const s = new Set(prev); s.delete(jobId); return s })
+    }
+  }
+
   const handleDelete = async (jobId: string) => {
     if (!confirm('정말 이 작업을 삭제하시겠습니까?')) return
     try {
       const response = await fetch(`${API_BASE_URL}/api/jobs/${jobId}`, { method: 'DELETE' })
-      if (response.ok) { loadData(); loadStatistics() }
+      if (response.ok) {
+        loadData()
+        loadStatistics()
+      } else {
+        const err = await response.json().catch(() => ({}))
+        alert(`삭제 실패: ${err.detail || response.statusText}`)
+      }
     } catch (error) {
       console.error('Failed to delete job:', error)
+      alert('삭제 중 오류가 발생했습니다.')
     }
   }
 
@@ -261,7 +336,7 @@ export default function JobsPage() {
                 <option value="failed">실패</option>
                 <option value="queued">대기 중</option>
               </select>
-              <button onClick={() => { void loadData() }} className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">
+              <button onClick={() => loadData()} className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">
                 검색
               </button>
             </div>
@@ -288,7 +363,7 @@ export default function JobsPage() {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => { void loadData() }}
+                  onClick={() => loadData()}
                   className="px-3 py-1.5 text-sm bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
                 >
                   새로고침
@@ -393,21 +468,42 @@ export default function JobsPage() {
               {filteredGroups.map(group => (
                 <div key={group.session_id} className="bg-surface-light dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark overflow-hidden">
                   {/* 세션 헤더 */}
-                  <button
-                    onClick={() => toggleGroup(group.session_id)}
-                    className="w-full flex items-center justify-between px-6 py-4 bg-background-light dark:bg-background-dark hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between px-6 py-4 bg-background-light dark:bg-background-dark">
+                    <button
+                      onClick={() => toggleGroup(group.session_id)}
+                      className="flex items-center gap-3 flex-1 text-left hover:opacity-80 transition-opacity"
+                    >
                       <span className="material-symbols-outlined text-primary">folder_open</span>
                       <span className="font-semibold text-text-primary-light dark:text-text-primary-dark">{group.session_name}</span>
                       <span className="px-2 py-0.5 text-xs rounded-full bg-primary/10 text-primary font-medium">
                         {group.jobs.length}개
                       </span>
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <label
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-colors ${uploadingSession === group.session_id ? 'opacity-50 cursor-not-allowed' : 'bg-primary/10 text-primary hover:bg-primary/20'}`}
+                        title="이 세션에 파일 추가"
+                      >
+                        <span className="material-symbols-outlined text-base">upload_file</span>
+                        <span>파일 추가</span>
+                        <input
+                          type="file"
+                          multiple
+                          accept=".pdf,.png,.jpg,.jpeg"
+                          className="hidden"
+                          disabled={uploadingSession === group.session_id}
+                          onChange={(e) => handleUpload(group.session_id, e.target.files)}
+                          onClick={(e) => { (e.target as HTMLInputElement).value = '' }}
+                        />
+                      </label>
+                      <span className={`material-symbols-outlined text-text-secondary-light dark:text-text-secondary-dark transition-transform duration-200 ${group.expanded ? 'rotate-180' : ''}`}
+                        onClick={() => toggleGroup(group.session_id)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        expand_more
+                      </span>
                     </div>
-                    <span className={`material-symbols-outlined text-text-secondary-light dark:text-text-secondary-dark transition-transform duration-200 ${group.expanded ? 'rotate-180' : ''}`}>
-                      expand_more
-                    </span>
-                  </button>
+                  </div>
 
                   {/* 작업 목록 */}
                   {group.expanded && (
@@ -464,6 +560,15 @@ export default function JobsPage() {
                                     }}
                                     className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
                                     다운로드
+                                  </button>
+                                )}
+                                {(job.status === 'completed' || job.status === 'failed') && (
+                                  <button
+                                    onClick={() => handleReprocess(job.job_id)}
+                                    disabled={reprocessingJobs.has(job.job_id)}
+                                    className="text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {reprocessingJobs.has(job.job_id) ? '요청 중...' : 'OCR 재처리'}
                                   </button>
                                 )}
                                 <button onClick={() => handleDelete(job.job_id)}

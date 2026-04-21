@@ -79,8 +79,8 @@ ocr:
   #  이미지의 가장 긴 변이 tile_size 이하면 타일링을 건너뜁니다.
   tiling:
     enabled: true
-    tile_size: 1500       # 타일 한 변의 최대 크기 (px)
-    overlap: 150          # 인접 타일 간 겹침 크기 (px) — 경계 누락 방지
+    tile_size: 1200       # 1500 → 1200: 더 작은 타일로 세밀한 감지
+    overlap: 200          # 150 → 200: 타일 경계 근처 텍스트 누락 방지
     nms_iou_threshold: 0.3  # 중복 제거 IoU 임계값
 
   # ── 읽기 순서(Reading Order) 설정 ──
@@ -94,10 +94,13 @@ ocr:
     row_overlap_threshold: 0.4
 
     # 컬럼으로 분리하는 최소 간격 비율 (페이지 너비 대비)
-    column_gap_ratio: 0.08
+    # 0.20: 명확한 2단 문서만 다단으로 처리
+    # (단일/복합 레이아웃은 row 클러스터링으로 왼→오른 정렬)
+    column_gap_ratio: 0.20
 
     # 컬럼당 최소 블록 비율 (너무 적으면 컬럼으로 인정하지 않음)
-    column_balance_ratio: 0.25
+    # 0.35: 양쪽에 최소 35% 이상 블록이 있어야 다단 인정
+    column_balance_ratio: 0.35
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -358,8 +361,8 @@ user:
 database:
   # PostgreSQL 예시 (아이디:ocr_user / 비밀번호:1234 / 호스트:192.168.0.231 / DB이름:ocr_db)
   # too many clients 오류 발생 시 임시로 SQLite 사용 (아래 주석 해제)
-  # url: "postgresql+psycopg2://ocr_user:1234@192.168.0.231:3306/ocr_db"
-  url: "sqlite:///data/ocr_gen.db"
+  url: "postgresql+psycopg2://ocr_user:1234@192.168.0.231:3306/ocr_db"
+  #url: "sqlite:///data/ocr_gen.db"
 
   # SQLite 예시 (기본값)
   # url: "sqlite:///data/ocr_gen.db"
