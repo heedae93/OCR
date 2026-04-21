@@ -40,7 +40,7 @@ function formatBytes(bytes: number): string {
 }
 
 export default function OcrWorkPage() {
-  const { trackedJobs, activeJobs, addTrackedJobs, dismissFinishedJobs } = useOcrActivity()
+  const { addTrackedJobs } = useOcrActivity()
   const [sessionName, setSessionName] = useState('')
   const [queue, setQueue] = useState<QueueFile[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -227,8 +227,6 @@ export default function OcrWorkPage() {
   const pendingCount = useMemo(() => queue.filter(file => file.status === 'pending').length, [queue])
   const queuedCount = useMemo(() => queue.filter(file => file.status === 'queued').length, [queue])
   const failedCount = useMemo(() => queue.filter(file => file.status === 'failed').length, [queue])
-  const backgroundJobs = useMemo(() => trackedJobs.slice(0, 8), [trackedJobs])
-
   return (
     <div className="bg-background-light dark:bg-background-dark min-h-screen">
       <Sidebar />
@@ -242,76 +240,6 @@ export default function OcrWorkPage() {
               파일 또는 폴더를 선택하고 OCR 작업을 Redis 큐에 등록합니다.
             </p>
           </div>
-
-          {trackedJobs.length > 0 && (
-            <section className="rounded-2xl border border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-base font-semibold text-text-primary-light dark:text-text-primary-dark">
-                    백그라운드 OCR 작업
-                  </h2>
-                  <p className="mt-1 text-sm text-text-secondary-light dark:text-text-secondary-dark">
-                    진행 중 {activeJobs.length}개 · 전체 추적 중 {trackedJobs.length}개
-                  </p>
-                </div>
-                <button
-                  onClick={dismissFinishedJobs}
-                  className="text-sm text-text-secondary-light dark:text-text-secondary-dark hover:text-primary"
-                >
-                  완료 항목 지우기
-                </button>
-              </div>
-
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                {backgroundJobs.map(job => (
-                  <div
-                    key={job.id}
-                    className="rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark px-4 py-3"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-text-primary-light dark:text-text-primary-dark">
-                          {job.filename}
-                        </p>
-                        <p className="truncate text-xs text-text-secondary-light dark:text-text-secondary-dark">
-                          {job.sessionName}
-                        </p>
-                      </div>
-                      <div className="shrink-0">
-                        {job.status === 'failed' ? (
-                          <AlertCircle className="w-4 h-4 text-red-500" />
-                        ) : job.status === 'completed' ? (
-                          <CheckCircle className="w-4 h-4 text-green-500" />
-                        ) : job.status === 'processing' ? (
-                          <Loader2 className="w-4 h-4 text-primary animate-spin" />
-                        ) : (
-                          <Clock className="w-4 h-4 text-primary" />
-                        )}
-                      </div>
-                    </div>
-
-                    <p className="mt-2 text-xs text-text-secondary-light dark:text-text-secondary-dark">
-                      {job.status === 'queued' && 'Redis 큐 대기 중'}
-                      {job.status === 'processing' && `${Math.round(job.progressPercent)}% 처리 중`}
-                      {job.status === 'completed' && '처리 완료'}
-                      {job.status === 'failed' && (job.error || '처리 실패')}
-                    </p>
-
-                    {(job.status === 'queued' || job.status === 'processing') && (
-                      <div className="mt-2 h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
-                        <div
-                          className="h-1.5 rounded-full bg-primary transition-all duration-300"
-                          style={{
-                            width: `${Math.max(10, Math.min(job.progressPercent || (job.status === 'queued' ? 10 : 0), 100))}%`,
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
 
           <div className="flex flex-col lg:flex-row gap-6">
             <div className="flex flex-col gap-4 lg:w-80 flex-shrink-0">
@@ -432,7 +360,12 @@ export default function OcrWorkPage() {
               {submitMessage && (
                 <div className="flex items-start gap-2 p-3 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-sm text-green-700 dark:text-green-400">
                   <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>{submitMessage}</span>
+                  <div className="flex flex-col gap-1">
+                    <span>{submitMessage}</span>
+                    <a href="/jobs" className="font-medium underline underline-offset-2 hover:opacity-80">
+                      진행 현황은 작업내역에서 확인하기
+                    </a>
+                  </div>
                 </div>
               )}
             </div>

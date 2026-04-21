@@ -189,7 +189,7 @@ export default function Sidebar() {
 
                 {/* Sub-menu items */}
                 {hasChildren && isExpanded && (
-                  <div className="flex flex-col gap-0.5 ml-4 pl-4 border-l border-border-light dark:border-border-dark animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div className="flex flex-col gap-0.5 ml-3 pl-3 border-l border-border-light dark:border-border-dark animate-in fade-in slide-in-from-top-1 duration-200">
                     {item.children!.map((child) => {
                       const childActive = isActive(child.href)
                       return (
@@ -207,7 +207,7 @@ export default function Sidebar() {
                           }`}>
                             {child.icon}
                           </span>
-                          <span className={`text-[13px] transition-all duration-200 ${
+                          <span className={`text-[13px] transition-all duration-200 whitespace-nowrap overflow-hidden text-ellipsis ${
                             childActive ? 'font-semibold' : 'font-medium'
                           }`}>
                             {child.label}

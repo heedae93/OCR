@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Sidebar from '@/components/Sidebar'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { API_BASE_URL } from '@/lib/api'
 
 interface Job {
@@ -37,11 +37,14 @@ interface Statistics {
 
 export default function JobsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [groups, setGroups] = useState<SessionGroup[]>([])
   const [statistics, setStatistics] = useState<Statistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [inProgressExpanded, setInProgressExpanded] = useState(false)
+  const [inProgressSessionExpanded, setInProgressSessionExpanded] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     loadData()
@@ -173,6 +176,42 @@ export default function JobsPage() {
       return matchStatus && matchSearch
     })
   })).filter(g => g.jobs.length > 0)
+  const inProgressGroups = groups
+    .map(g => ({
+      ...g,
+      jobs: g.jobs.filter(job => job.status === 'queued' || job.status === 'processing'),
+    }))
+    .filter(g => g.jobs.length > 0)
+  const inProgressCount = inProgressGroups.reduce((acc, g) => acc + g.jobs.length, 0)
+  const focusSessionName = searchParams.get('sessionName')
+  const openInProgress = searchParams.get('inProgress') === '1'
+
+  useEffect(() => {
+    if (!openInProgress) return
+    setInProgressExpanded(true)
+  }, [openInProgress])
+
+  useEffect(() => {
+    setInProgressSessionExpanded(prev => {
+      const next: Record<string, boolean> = {}
+      for (const group of inProgressGroups) {
+        next[group.session_id] = prev[group.session_id] ?? true
+      }
+      return next
+    })
+  }, [inProgressGroups])
+
+  useEffect(() => {
+    if (!openInProgress || !focusSessionName || !inProgressExpanded) return
+    const targetId = `in-progress-${focusSessionName}`
+    const timer = setTimeout(() => {
+      const target = document.getElementById(targetId)
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [focusSessionName, inProgressExpanded, inProgressGroups, openInProgress])
 
   return (
     <div className="bg-background-light dark:bg-background-dark min-h-screen">
@@ -227,6 +266,118 @@ export default function JobsPage() {
               </button>
             </div>
           </div>
+
+          {/* In-progress Jobs */}
+          <section className="bg-surface-light dark:bg-surface-dark p-5 rounded-xl border border-border-light dark:border-border-dark mb-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-semibold text-text-primary-light dark:text-text-primary-dark">진행 중 작업</h2>
+                  <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full bg-primary text-white text-xs font-bold">
+                    {inProgressCount}
+                  </span>
+                </div>
+                <p className="text-sm text-text-secondary-light dark:text-text-secondary-dark mt-1">
+                  큐 대기/처리 중 작업 수
+                </p>
+                {focusSessionName && (
+                  <p className="mt-1 text-xs text-primary font-medium">
+                    선택 세션: {focusSessionName}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { void loadData() }}
+                  className="px-3 py-1.5 text-sm bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
+                >
+                  새로고침
+                </button>
+                <button
+                  onClick={() => setInProgressExpanded(prev => !prev)}
+                  className="flex items-center justify-center rounded-lg border border-border-light dark:border-border-dark px-2.5 py-1.5 text-text-secondary-light dark:text-text-secondary-dark hover:text-primary hover:border-primary/30 transition-colors"
+                  aria-label={inProgressExpanded ? '진행 중 작업 접기' : '진행 중 작업 펼치기'}
+                  title={inProgressExpanded ? '접기' : '펼치기'}
+                >
+                  <span className="material-symbols-outlined text-lg leading-none">
+                    {inProgressExpanded ? 'expand_less' : 'expand_more'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {!inProgressExpanded ? null : inProgressCount === 0 ? (
+              <div className="mt-4 rounded-lg border border-dashed border-border-light dark:border-border-dark px-4 py-6 text-sm text-text-secondary-light dark:text-text-secondary-dark text-center">
+                현재 진행 중인 작업이 없습니다.
+              </div>
+            ) : (
+              <div className="mt-4 flex flex-col gap-4">
+                {inProgressGroups.map(group => (
+                  <div
+                    key={`in-progress-${group.session_id}`}
+                    id={`in-progress-${group.session_name}`}
+                    className="rounded-xl border border-border-light dark:border-border-dark overflow-hidden"
+                  >
+                    <div className="flex items-center justify-between gap-3 px-4 py-3 bg-background-light dark:bg-background-dark border-b border-border-light dark:border-border-dark">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="material-symbols-outlined text-primary text-base">folder_open</span>
+                        <p className="truncate text-sm font-semibold text-text-primary-light dark:text-text-primary-dark">
+                          {group.session_name}
+                        </p>
+                      </div>
+                      <span className="px-2 py-0.5 text-xs rounded-full bg-primary/10 text-primary font-medium">
+                        {group.jobs.length}개
+                      </span>
+                    </div>
+                    <button
+                      onClick={() =>
+                        setInProgressSessionExpanded(prev => ({
+                          ...prev,
+                          [group.session_id]: !(prev[group.session_id] ?? true),
+                        }))
+                      }
+                      className="w-full flex items-center justify-center gap-1.5 py-2 text-xs text-text-secondary-light dark:text-text-secondary-dark hover:text-primary hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-base leading-none">
+                        {(inProgressSessionExpanded[group.session_id] ?? true) ? 'expand_less' : 'expand_more'}
+                      </span>
+                      {(inProgressSessionExpanded[group.session_id] ?? true) ? '접기' : '펼치기'}
+                    </button>
+                    {(inProgressSessionExpanded[group.session_id] ?? true) && (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 p-3">
+                        {group.jobs.map(job => (
+                          <div
+                            key={job.job_id}
+                            className="rounded-xl border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark px-4 py-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-text-primary-light dark:text-text-primary-dark">
+                                  {job.filename}
+                                </p>
+                              </div>
+                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(job.status)}`}>
+                                {getStatusText(job.status)}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-xs text-text-secondary-light dark:text-text-secondary-dark">
+                              진행률 {Math.round(job.progress_percent || 0)}% · 생성 {formatDate(job.created_at)}
+                            </p>
+                            <div className="mt-2 h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+                              <div
+                                className="h-1.5 rounded-full bg-primary transition-all duration-300"
+                                style={{ width: `${Math.max(8, Math.min(job.progress_percent || (job.status === 'queued' ? 8 : 0), 100))}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
 
           {/* Groups */}
           {loading ? (

@@ -12,6 +12,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { useOcrActivity } from '@/contexts/OcrActivityContext'
+import type { TrackedJob } from '@/contexts/OcrActivityContext'
 
 const STORAGE_KEY = 'ocr-activity-banner-ui'
 
@@ -30,10 +31,19 @@ function getStatusText(status: 'queued' | 'processing' | 'completed' | 'failed')
 
 export default function GlobalOcrActivityBanner() {
   const { trackedJobs, activeJobs, dismissFinishedJobs } = useOcrActivity()
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
 
   const completedCount = trackedJobs.filter(job => job.status === 'completed').length
   const failedCount = trackedJobs.filter(job => job.status === 'failed').length
+  const groupedJobs = trackedJobs.reduce<Array<{ sessionName: string; jobs: TrackedJob[] }>>((acc, job) => {
+    const existing = acc.find(group => group.sessionName === job.sessionName)
+    if (existing) {
+      existing.jobs.push(job)
+    } else {
+      acc.push({ sessionName: job.sessionName, jobs: [job] })
+    }
+    return acc
+  }, [])
 
   useEffect(() => {
     try {
@@ -115,60 +125,70 @@ export default function GlobalOcrActivityBanner() {
       )}
 
       <div className="max-h-[420px] overflow-y-auto px-4 py-3">
-        <div className="flex flex-col gap-2">
-          {trackedJobs.map(job => (
-            <div
-              key={job.id}
-              className="rounded-xl border border-border-light dark:border-border-dark bg-background-light/70 dark:bg-background-dark/70 px-3 py-2"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-text-primary-light dark:text-text-primary-dark">
-                    {job.filename}
-                  </p>
-                  <p className="truncate text-xs text-text-secondary-light dark:text-text-secondary-dark">
-                    {job.sessionName}
-                  </p>
-                </div>
-                <div className="shrink-0 text-xs font-medium">
-                  {job.status === 'failed' ? (
-                    <span className="inline-flex items-center gap-1 text-red-500">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      {getStatusText(job.status)}
-                    </span>
-                  ) : job.status === 'completed' ? (
-                    <span className="inline-flex items-center gap-1 text-green-500">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      {getStatusText(job.status)}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-primary">
-                      <Clock3 className="w-3.5 h-3.5" />
-                      {getStatusText(job.status)}
-                    </span>
-                  )}
-                </div>
+        <div className="flex flex-col gap-3">
+          {groupedJobs.map(group => (
+            <div key={group.sessionName} className="rounded-xl border border-border-light dark:border-border-dark bg-background-light/70 dark:bg-background-dark/70">
+              <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border-light dark:border-border-dark">
+                <p className="truncate text-xs font-semibold text-text-primary-light dark:text-text-primary-dark">
+                  {group.sessionName}
+                </p>
+                <Link
+                  href={`/jobs?inProgress=1&sessionName=${encodeURIComponent(group.sessionName)}`}
+                  className="text-[11px] font-medium text-primary hover:text-primary/80"
+                >
+                  이 세션 보기
+                </Link>
               </div>
+              <div className="px-3 py-2 flex flex-col gap-2">
+                {group.jobs.map(job => (
+                  <Link
+                    key={job.id}
+                    href={`/jobs?inProgress=1&sessionName=${encodeURIComponent(job.sessionName)}`}
+                    className="block rounded-lg border border-border-light dark:border-border-dark bg-surface-light/80 dark:bg-surface-dark/60 px-2.5 py-2 hover:border-primary/30 hover:bg-primary/5 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-text-primary-light dark:text-text-primary-dark">
+                          {job.filename}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-xs font-medium">
+                        {job.status === 'failed' ? (
+                          <span className="inline-flex items-center gap-1 text-red-500">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            {getStatusText(job.status)}
+                          </span>
+                        ) : job.status === 'completed' ? (
+                          <span className="inline-flex items-center gap-1 text-green-500">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            {getStatusText(job.status)}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-primary">
+                            <Clock3 className="w-3.5 h-3.5" />
+                            {getStatusText(job.status)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
 
-              {(job.status === 'queued' || job.status === 'processing') && (
-                <div className="mt-2">
-                  <div className="h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
-                    <div
-                      className="h-1.5 rounded-full bg-primary transition-all duration-300"
-                      style={{ width: `${Math.max(8, Math.min(job.progressPercent, 100))}%` }}
-                    />
-                  </div>
-                  <p className="mt-1 text-[11px] text-text-secondary-light dark:text-text-secondary-dark">
-                    {job.status === 'queued'
-                      ? 'Redis 큐에 등록되어 워커를 기다리는 중입니다.'
-                      : `${Math.round(job.progressPercent)}% 처리 중`}
-                  </p>
-                </div>
-              )}
+                    {(job.status === 'queued' || job.status === 'processing') && (
+                      <div className="mt-2">
+                        <div className="h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+                          <div
+                            className="h-1.5 rounded-full bg-primary transition-all duration-300"
+                            style={{ width: `${Math.max(8, Math.min(job.progressPercent, 100))}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
 
-              {job.status === 'failed' && job.error && (
-                <p className="mt-1 text-[11px] text-red-500">{job.error}</p>
-              )}
+                    {job.status === 'failed' && job.error && (
+                      <p className="mt-1 text-[11px] text-red-500">{job.error}</p>
+                    )}
+                  </Link>
+                ))}
+              </div>
             </div>
           ))}
         </div>
