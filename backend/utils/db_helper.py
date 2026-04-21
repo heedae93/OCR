@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any
 import json
-from database import SessionLocal, Job, OCRPage, DocumentChunk, User, Session, SessionDocument
+from database import SessionLocal, Job, OCRPage, DocumentChunk, User, Session, SessionDocument, DocumentMetadataValue
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,8 @@ def create_job_in_db(
     filename: str,
     file_path: str,
     file_size: int,
-    user_id: str = "default"
+    user_id: str = "default",
+    doc_type: Optional[str] = None
 ) -> bool:
     """Create a new job in database"""
     try:
@@ -119,22 +120,23 @@ def create_job_in_db(
             return False
 
         # Determine file type
-        file_type = Path(filename).suffix.lstrip('.').lower()
+        file_ext = Path(filename).suffix.lstrip('.').lower()
 
         # Create job
         job = Job(
             job_id=job_id,
             user_id=user_id,
             original_filename=filename,
-            file_type=file_type,
+            file_type=file_ext,
             file_size_bytes=file_size,
             status="queued",
-            raw_file_path=file_path
+            raw_file_path=file_path,
+            doc_type=doc_type  # 선택한 카테고리 저장
         )
 
         db.add(job)
         db.commit()
-        logger.info(f"Created job {job_id} in database")
+        logger.info(f"Created job {job_id} with category '{doc_type}' in database")
 
         db.close()
         return True
@@ -314,6 +316,17 @@ def update_job_ocr_results(
                             item.pop("raw_entities", None)
                         job.extracted_fields = json.dumps(kv_items, ensure_ascii=False)
                         logger.info(f"[NER] job {job_id}: {len(kv_items)}개 KV 쌍 저장")
+                        
+                        # 전용 테이블에도 개별 저장
+                        for item in kv_items:
+                            db.add(DocumentMetadataValue(
+                                job_id=job_id,
+                                field_key=item.get("entity_type", "unknown"),
+                                label=item.get("entity_type_ko", item.get("key")),
+                                field_value=item.get("value"),
+                                confidence=item.get("score"),
+                                page_number=item.get("page_number")
+                            ))
                 except Exception as ner_err:
                     logger.error(f"[NER] 추출 실패 job {job_id}: {ner_err}")
 

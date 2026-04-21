@@ -92,6 +92,9 @@ class Config:
     COLUMN_CONFIDENCE_THRESHOLD = 0.05
     COLUMN_MIN_BLOCKS = 4
 
+    # Redis settings (Celery broker)
+    REDIS_URL = "redis://localhost:6379/0"
+
     # User settings
     DEFAULT_USER_ID = "user001"
     DEFAULT_USER_NAME = "사용자"
@@ -222,6 +225,10 @@ class Config:
         if "database" in config_data:
             db_config = config_data["database"]
             cls.DATABASE_URL = db_config.get("url", cls.DATABASE_URL)
+
+        # Update Redis settings
+        if "redis" in config_data:
+            cls.REDIS_URL = config_data["redis"].get("url", cls.REDIS_URL)
 
         # Update server settings
         if "server" in config_data:

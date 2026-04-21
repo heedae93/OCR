@@ -53,15 +53,15 @@ export default function JobsPage() {
     const hasProcessing = groups.some(g => g.jobs.some(j => j.status === 'processing' || j.status === 'queued'))
     if (!hasProcessing) return
     const timer = setInterval(() => {
-      loadData()
+      loadData({ silent: true })
       loadStatistics()
     }, 3000)
     return () => clearInterval(timer)
   }, [groups])
 
-  const loadData = async () => {
+  const loadData = async ({ silent = false }: { silent?: boolean } = {}) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       const user = JSON.parse(localStorage.getItem('user') || '{}')
       const userId = user.user_id || ''
 
@@ -105,7 +105,7 @@ export default function JobsPage() {
     } catch (error) {
       console.error('Failed to load data:', error)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
@@ -222,7 +222,7 @@ export default function JobsPage() {
                 <option value="failed">실패</option>
                 <option value="queued">대기 중</option>
               </select>
-              <button onClick={loadData} className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">
+              <button onClick={() => { void loadData() }} className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">
                 검색
               </button>
             </div>

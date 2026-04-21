@@ -9,16 +9,25 @@ interface NavItem {
   icon: string
   label: string
   badge?: string | number
+  children?: NavItem[]
 }
 
 const baseNavItems: NavItem[] = [
   { href: '/', icon: 'dashboard', label: '대시보드' },
-  { href: '/metadata', icon: 'dataset', label: '메타데이터 관리' },
-  { href: '/metadata-v3', icon: 'security', label: '문서별 마스킹 설정' },
+  { 
+    href: '/metadata-management', 
+    icon: 'schema', 
+    label: '메타데이터 관리',
+    children: [
+      { href: '/metadata-v3', icon: 'settings_input_component', label: '문서 유형별 추출 설정' },
+      { href: '/metadata/extraction-list', icon: 'list_alt', label: '메타데이터 추출 리스트' },
+    ]
+  },
   { href: '/ocr-work', icon: 'document_scanner', label: 'OCR 작업하기' },
   { href: '/jobs', icon: 'history', label: '작업내역' },
   { href: '/history', icon: 'manage_history', label: '이력관리' },
   { href: '/statistics', icon: 'bar_chart', label: '통계' },
+  { href: '/metadata', icon: 'settings_suggest', label: '추출 엔진 설정' },
 ]
 
 const adminNavItems: NavItem[] = [
@@ -34,6 +43,7 @@ export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [expandedMenus, setExpandedMenus] = useState<string[]>([])
   const [user, setUser] = useState<{ name: string; username: string; type?: string; user_id?: string } | null>(null)
   const [todayCount, setTodayCount] = useState(0)
 
@@ -45,6 +55,17 @@ export default function Sidebar() {
       fetchTodayCount(parsed.user_id || '')
     }
   }, [])
+
+  // Check if current path belongs to a sub-menu and auto-expand
+  useEffect(() => {
+    baseNavItems.forEach(item => {
+      if (item.children?.some(child => pathname.startsWith(child.href))) {
+        if (!expandedMenus.includes(item.label)) {
+          setExpandedMenus(prev => [...prev, item.label])
+        }
+      }
+    })
+  }, [pathname])
 
   const fetchTodayCount = async (userId: string) => {
     try {
@@ -65,7 +86,13 @@ export default function Sidebar() {
     : bottomNavItems.filter(i => i.href !== '/settings')
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const isActive = (path: string) => pathname === path
+  const isActive = (path: string) => pathname === path || (path !== '/' && pathname.startsWith(path))
+
+  const toggleMenu = (label: string) => {
+    setExpandedMenus(prev => 
+      prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]
+    )
+  }
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -101,36 +128,96 @@ export default function Sidebar() {
         {/* Navigation */}
         <nav className="flex flex-col gap-1 mt-2 flex-grow">
           {navItems.map((item) => {
+            const hasChildren = item.children && item.children.length > 0
             const active = isActive(item.href)
+            const isExpanded = expandedMenus.includes(item.label)
+
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative overflow-hidden shrink-0 ${
-                  active
-                    ? 'bg-primary/10 dark:bg-primary/15 text-primary'
-                    : 'hover:bg-black/5 dark:hover:bg-white/5 text-text-secondary-light dark:text-text-secondary-dark hover:text-text-primary-light dark:hover:text-text-primary-dark'
-                }`}
-              >
-                {active && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
+              <div key={item.label} className="flex flex-col gap-0.5">
+                {hasChildren ? (
+                  <button
+                    onClick={() => toggleMenu(item.label)}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative overflow-hidden shrink-0 ${
+                      active
+                        ? 'bg-primary/10 dark:bg-primary/15 text-primary'
+                        : 'hover:bg-black/5 dark:hover:bg-white/5 text-text-secondary-light dark:text-text-secondary-dark hover:text-text-primary-light dark:hover:text-text-primary-dark'
+                    }`}
+                  >
+                    <span className={`material-symbols-outlined text-xl transition-all duration-200 ${
+                      active ? 'text-primary' : 'group-hover:scale-110'
+                    } ${active ? 'fill' : ''}`}>
+                      {item.icon}
+                    </span>
+                    <span className={`text-sm transition-all duration-200 flex-1 text-left ${
+                      active ? 'font-semibold' : 'font-medium'
+                    }`}>
+                      {item.label}
+                    </span>
+                    <span className={`material-symbols-outlined text-lg transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
+                      expand_more
+                    </span>
+                  </button>
+                ) : (
+                  <Link
+                    href={item.href}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative overflow-hidden shrink-0 ${
+                      active
+                        ? 'bg-primary/10 dark:bg-primary/15 text-primary'
+                        : 'hover:bg-black/5 dark:hover:bg-white/5 text-text-secondary-light dark:text-text-secondary-dark hover:text-text-primary-light dark:hover:text-text-primary-dark'
+                    }`}
+                  >
+                    {active && !hasChildren && (
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
+                    )}
+                    <span className={`material-symbols-outlined text-xl transition-all duration-200 ${
+                      active ? 'text-primary' : 'group-hover:scale-110'
+                    } ${active ? 'fill' : ''}`}>
+                      {item.icon}
+                    </span>
+                    <span className={`text-sm transition-all duration-200 ${
+                      active ? 'font-semibold' : 'font-medium'
+                    }`}>
+                      {item.label}
+                    </span>
+                    {item.badge && (
+                      <span className="ml-auto px-2 py-0.5 text-xs font-semibold bg-primary/20 text-primary rounded-full">
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
                 )}
-                <span className={`material-symbols-outlined text-xl transition-all duration-200 ${
-                  active ? 'text-primary' : 'group-hover:scale-110'
-                } ${active ? 'fill' : ''}`}>
-                  {item.icon}
-                </span>
-                <span className={`text-sm transition-all duration-200 ${
-                  active ? 'font-semibold' : 'font-medium'
-                }`}>
-                  {item.label}
-                </span>
-                {item.badge && (
-                  <span className="ml-auto px-2 py-0.5 text-xs font-semibold bg-primary/20 text-primary rounded-full">
-                    {item.badge}
-                  </span>
+
+                {/* Sub-menu items */}
+                {hasChildren && isExpanded && (
+                  <div className="flex flex-col gap-0.5 ml-4 pl-4 border-l border-border-light dark:border-border-dark animate-in fade-in slide-in-from-top-1 duration-200">
+                    {item.children!.map((child) => {
+                      const childActive = isActive(child.href)
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group relative ${
+                            childActive
+                              ? 'text-primary'
+                              : 'text-text-secondary-light dark:text-text-secondary-dark hover:text-text-primary-light dark:hover:text-text-primary-dark'
+                          }`}
+                        >
+                          <span className={`material-symbols-outlined text-lg transition-all duration-200 ${
+                            childActive ? 'text-primary' : 'group-hover:scale-110'
+                          }`}>
+                            {child.icon}
+                          </span>
+                          <span className={`text-[13px] transition-all duration-200 ${
+                            childActive ? 'font-semibold' : 'font-medium'
+                          }`}>
+                            {child.label}
+                          </span>
+                        </Link>
+                      )
+                    })}
+                  </div>
                 )}
-              </Link>
+              </div>
             )
           })}
         </nav>

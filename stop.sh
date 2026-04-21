@@ -65,6 +65,26 @@ stop_server() {
 stop_server "Backend"  "logs/backend.pid"  "$BACKEND_PORT"
 stop_server "Frontend" "logs/frontend.pid" "$FRONTEND_PORT"
 
+# ── Celery Worker 종료 ────────────────────────────────────
+if [ -f "logs/worker.pid" ]; then
+    WORKER_PID=$(cat logs/worker.pid)
+    if kill -0 "$WORKER_PID" 2>/dev/null; then
+        kill "$WORKER_PID" 2>/dev/null
+        echo "[OK] Celery Worker stopped (PID: $WORKER_PID)"
+    fi
+    rm -f logs/worker.pid
+fi
+
+# ── Redis 종료 ────────────────────────────────────────────
+if [ -f "logs/redis.pid" ]; then
+    REDIS_PID=$(cat logs/redis.pid)
+    if kill -0 "$REDIS_PID" 2>/dev/null; then
+        kill "$REDIS_PID" 2>/dev/null
+        echo "[OK] Redis stopped (PID: $REDIS_PID)"
+    fi
+    rm -f logs/redis.pid
+fi
+
 echo "========================================"
 echo "  All servers stopped."
 echo "========================================"

@@ -67,6 +67,47 @@ fi
 # ── 로그 디렉토리 확인 ────────────────────────────────────
 mkdir -p logs
 
+# ── Redis 확인 및 시작 ────────────────────────────────────
+echo "[INFO] Checking Redis..."
+
+redis_running() {
+    # Python redis 패키지로 실제 응답 확인 (redis-cli 없어도 동작)
+    python -c "
+import redis, sys
+try:
+    r = redis.from_url('${REDIS_URL:-redis://localhost:6379/0}')
+    r.ping()
+    sys.exit(0)
+except Exception:
+    sys.exit(1)
+" 2>/dev/null
+}
+
+if redis_running; then
+    echo "[OK] Redis is already running"
+elif command -v redis-server &>/dev/null; then
+    nohup redis-server > logs/redis.log 2>&1 &
+    REDIS_PID=$!
+    echo "$REDIS_PID" > logs/redis.pid
+    # 실제로 응답할 때까지 대기 (최대 5초)
+    for i in 1 2 3 4 5; do
+        sleep 1
+        if redis_running; then
+            echo "[OK] Redis started (PID: $REDIS_PID)"
+            break
+        fi
+        if [ $i -eq 5 ]; then
+            echo "[ERROR] Redis started but not responding. Check logs/redis.log"
+            exit 1
+        fi
+    done
+else
+    echo "[ERROR] Redis is not running and redis-server is not installed."
+    echo "        Docker:  docker run -d -p 6379:6379 --name bbocr-redis redis"
+    echo "        WSL:     sudo apt install redis-server && sudo service redis start"
+    exit 1
+fi
+
 # ── Frontend .env.local 설정 ───────────────────────────────
 # 이미 .env.local이 존재하면 그대로 사용 (수동 설정 존중)
 SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -99,6 +140,20 @@ BACKEND_PID=$!
 echo "$BACKEND_PID" > ../logs/backend.pid
 cd ..
 echo "[OK] Backend started (PID: $BACKEND_PID)"
+
+# ── Celery Worker 시작 ────────────────────────────────────
+echo "[INFO] Starting Celery OCR Worker..."
+cd backend
+nohup python -m celery -A ocr_worker worker \
+    -Q ocr \
+    -n ocr_worker@%h \
+    --loglevel=info \
+    --pool=solo \
+    > ../logs/worker.log 2>&1 &
+WORKER_PID=$!
+echo "$WORKER_PID" > ../logs/worker.pid
+cd ..
+echo "[OK] Celery Worker started (PID: $WORKER_PID)"
 
 # ── Frontend 빌드 확인 ────────────────────────────────────
 # .next가 없거나 .env.local이 .next보다 새로우면 빌드
@@ -135,9 +190,12 @@ echo "  Servers started successfully!"
 echo "========================================"
 echo "  Backend:  http://${SERVER_IP}:${BACKEND_PORT}  (PID: $BACKEND_PID)"
 echo "  Frontend: http://${SERVER_IP}:${FRONTEND_PORT}  (PID: $FRONTEND_PID)"
+echo "  Worker:   Celery OCR Worker            (PID: $WORKER_PID)"
 echo ""
 echo "  Logs:     tail -f logs/backend.log"
 echo "            tail -f logs/frontend.log"
+echo "            tail -f logs/worker.log"
+echo "            tail -f logs/redis.log"
 echo "  Stop:     ./stop.sh"
 echo "  Status:   ./status.sh"
 echo "========================================"

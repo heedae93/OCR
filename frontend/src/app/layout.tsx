@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { ThemeProvider } from '@/contexts/ThemeContext'
+import { OcrActivityProvider } from '@/contexts/OcrActivityContext'
+import GlobalOcrActivityBanner from '@/components/GlobalOcrActivityBanner'
 
 export const metadata: Metadata = {
   title: 'Futurenuri PDFix',
@@ -26,7 +28,10 @@ export default function RootLayout({
       </head>
       <body>
         <ThemeProvider>
-          {children}
+          <OcrActivityProvider>
+            {children}
+            <GlobalOcrActivityBanner />
+          </OcrActivityProvider>
         </ThemeProvider>
       </body>
     </html>

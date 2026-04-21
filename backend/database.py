@@ -249,7 +249,7 @@ class DocumentCategory(Base):
 
 
 class CustomMaskingField(Base):
-    """사용자 커스텀 마스킹 필드 정의"""
+    """사용자 커스텀 필드 정의 (구 마스킹 필드)"""
     __tablename__ = "custom_masking_fields"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -259,6 +259,52 @@ class CustomMaskingField(Base):
     pattern = Column(String(500), nullable=True)      # 정규식 패턴 지정
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
+
+
+# ============================================================
+# 신규: 메타데이터 관리 전용 테이블
+# ============================================================
+
+class MetadataFieldDefinition(Base):
+    """추출 가능한 메타데이터 필드 정의"""
+    __tablename__ = "metadata_field_definitions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(36), index=True)
+    field_key = Column(String(50), nullable=False)  # 예: 'title', 'amount'
+    label = Column(String(100), nullable=False)    # 예: '문서 제목', '결제 금액'
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+
+class ExtractionRule(Base):
+    """문서 유형별 추출 필드 연결 규칙"""
+    __tablename__ = "extraction_rules"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(36), index=True)
+    doc_type = Column(String(100), nullable=False)  # 예: '영수증'
+    field_id = Column(Integer, ForeignKey("metadata_field_definitions.id", ondelete="CASCADE"))
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    field = relationship("MetadataFieldDefinition")
+
+
+class DocumentMetadataValue(Base):
+    """실제 추출된 메타데이터 결과 값 (문서당 여러 행)"""
+    __tablename__ = "document_metadata_values"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(String(36), ForeignKey("jobs.job_id", ondelete="CASCADE"), index=True)
+    field_key = Column(String(50), nullable=False)   # 영문 키 (복제 보관)
+    label = Column(String(100), nullable=True)      # 한글 필드명 (스냅샷 저장)
+    field_value = Column(Text, nullable=True)
+    confidence = Column(Float, nullable=True)
+    page_number = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    job = relationship("Job")
 
 
 def init_db():

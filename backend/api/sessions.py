@@ -79,6 +79,7 @@ class SessionResponse(BaseModel):
 class AddDocumentRequest(BaseModel):
     """Request to add a document to session"""
     job_id: str
+    doc_type: Optional[str] = None
 
 
 class UpdateSelectionRequest(BaseModel):
@@ -442,6 +443,9 @@ async def add_document_to_session(
         )
 
         db.add(session_doc)
+        if request.doc_type is not None:
+            normalized_doc_type = request.doc_type.strip() or None
+            job.doc_type = normalized_doc_type
         session.updated_at = datetime.now()
         db.commit()
 
