@@ -358,8 +358,7 @@ user:
 database:
   # PostgreSQL 예시 (아이디:ocr_user / 비밀번호:1234 / 호스트:192.168.0.231 / DB이름:ocr_db)
   # too many clients 오류 발생 시 임시로 SQLite 사용 (아래 주석 해제)
-  # url: "postgresql+psycopg2://ocr_user:1234@192.168.0.231:3306/ocr_db"
-  url: "sqlite:///data/ocr_gen.db"
+  url: "postgresql+psycopg2://ocr_user:1234@192.168.0.231:3306/ocr_db"
 
   # SQLite 예시 (기본값)
   # url: "sqlite:///data/ocr_gen.db"

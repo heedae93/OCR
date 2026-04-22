@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Sidebar from '@/components/Sidebar'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { API_BASE_URL } from '@/lib/api'
 
 interface Job {
@@ -37,7 +37,6 @@ interface Statistics {
 
 export default function JobsPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [groups, setGroups] = useState<SessionGroup[]>([])
   const [statistics, setStatistics] = useState<Statistics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -45,22 +44,13 @@ export default function JobsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [inProgressExpanded, setInProgressExpanded] = useState(false)
   const [inProgressSessionExpanded, setInProgressSessionExpanded] = useState<Record<string, boolean>>({})
+  const [focusSessionName, setFocusSessionName] = useState<string | null>(null)
+  const [openInProgress, setOpenInProgress] = useState(false)
 
   useEffect(() => {
     loadData()
     loadStatistics()
   }, [statusFilter])
-
-  // 처리 중인 작업이 있으면 3초마다 자동 새로고침
-  useEffect(() => {
-    const hasProcessing = groups.some(g => g.jobs.some(j => j.status === 'processing' || j.status === 'queued'))
-    if (!hasProcessing) return
-    const timer = setInterval(() => {
-      loadData({ silent: true })
-      loadStatistics()
-    }, 3000)
-    return () => clearInterval(timer)
-  }, [groups])
 
   const loadData = async ({ silent = false }: { silent?: boolean } = {}) => {
     try {
@@ -176,15 +166,20 @@ export default function JobsPage() {
       return matchStatus && matchSearch
     })
   })).filter(g => g.jobs.length > 0)
-  const inProgressGroups = groups
+  const inProgressGroups = useMemo(() => groups
     .map(g => ({
       ...g,
       jobs: g.jobs.filter(job => job.status === 'queued' || job.status === 'processing'),
     }))
-    .filter(g => g.jobs.length > 0)
+    .filter(g => g.jobs.length > 0), [groups])
   const inProgressCount = inProgressGroups.reduce((acc, g) => acc + g.jobs.length, 0)
-  const focusSessionName = searchParams.get('sessionName')
-  const openInProgress = searchParams.get('inProgress') === '1'
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    setFocusSessionName(params.get('sessionName'))
+    setOpenInProgress(params.get('inProgress') === '1')
+  }, [])
 
   useEffect(() => {
     if (!openInProgress) return
@@ -193,11 +188,15 @@ export default function JobsPage() {
 
   useEffect(() => {
     setInProgressSessionExpanded(prev => {
-      const next: Record<string, boolean> = {}
+      let changed = false
+      const next: Record<string, boolean> = { ...prev }
       for (const group of inProgressGroups) {
-        next[group.session_id] = prev[group.session_id] ?? true
+        if (next[group.session_id] === undefined) {
+          next[group.session_id] = true
+          changed = true
+        }
       }
-      return next
+      return changed ? next : prev
     })
   }, [inProgressGroups])
 
@@ -216,7 +215,7 @@ export default function JobsPage() {
   return (
     <div className="bg-background-light dark:bg-background-dark min-h-screen">
       <Sidebar />
-      <main className="flex-1 ml-64 p-6 lg:p-10">
+      <main className="ml-64 p-6 lg:p-10">
         <div className="w-full max-w-7xl mx-auto">
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
