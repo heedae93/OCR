@@ -4,14 +4,14 @@
 # config.yaml에서 포트를 읽어 백엔드 + 프론트엔드를 시작합니다.
 #
 
-set -e
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+PYTHON_BIN="/c/Users/glgld/.conda/envs/bbocr/python.exe"
+
 # ── config.yaml에서 설정 읽기 ──────────────────────────────
 read_config() {
-    /c/Users/glgld/.conda/envs/bbocr/python.exe -c "
+    "$PYTHON_BIN" -c "
 import yaml, sys
 with open('config.yaml', 'r', encoding='utf-8') as f:
     cfg = yaml.safe_load(f)
@@ -52,16 +52,47 @@ port_in_use() {
     netstat -an 2>/dev/null | grep -q ":$1 .*LISTENING"
 }
 
+kill_port() {
+    local port="$1"
+    local pids
+    pids=$(netstat -ano 2>/dev/null \
+        | grep -E ":${port}[ \t].*LISTEN" \
+        | awk '{print $NF}' | tr -d '\r' | sort -u | grep -v '^0$')
+    for pid in $pids; do
+        taskkill //F //PID "$pid" > /dev/null 2>&1 && \
+            echo "[INFO] Killed existing process on port $port (PID: $pid)"
+    done
+}
+
+backend_healthy() {
+    local port="$1"
+    curl -sf --max-time 3 "http://127.0.0.1:${port}/health" > /dev/null 2>&1
+}
+
+SKIP_BACKEND=false
 if port_in_use "$BACKEND_PORT"; then
-    echo "[WARN] Backend port $BACKEND_PORT already in use. Stop existing server first."
-    echo "       Run: ./stop.sh"
-    exit 1
+    if backend_healthy "$BACKEND_PORT"; then
+        echo "[OK] Backend already running on port $BACKEND_PORT — skipping restart"
+        SKIP_BACKEND=true
+    else
+        echo "[INFO] Backend port $BACKEND_PORT in use. Killing..."
+        kill_port "$BACKEND_PORT"
+        sleep 1
+        if port_in_use "$BACKEND_PORT"; then
+            echo "[ERROR] Cannot free port $BACKEND_PORT. Run: ./stop.sh"
+            exit 1
+        fi
+    fi
 fi
 
 if port_in_use "$FRONTEND_PORT"; then
-    echo "[WARN] Frontend port $FRONTEND_PORT already in use. Stop existing server first."
-    echo "       Run: ./stop.sh"
-    exit 1
+    echo "[INFO] Frontend port $FRONTEND_PORT in use. Killing..."
+    kill_port "$FRONTEND_PORT"
+    sleep 1
+    if port_in_use "$FRONTEND_PORT"; then
+        echo "[ERROR] Cannot free port $FRONTEND_PORT. Run: ./stop.sh"
+        exit 1
+    fi
 fi
 
 # ── 로그 디렉토리 확인 ────────────────────────────────────
@@ -70,7 +101,6 @@ mkdir -p logs
 # ── Redis 확인 및 시작 ────────────────────────────────────
 echo "[INFO] Checking Redis..."
 
-PYTHON_BIN="/c/Users/glgld/.conda/envs/bbocr/python.exe"
 REDIS_URL="${REDIS_URL:-redis://localhost:6379/0}"
 
 redis_running() {
@@ -172,17 +202,21 @@ EOF
 fi
 
 # ── Backend 시작 ──────────────────────────────────────────
-echo "[INFO] Starting backend server..."
-cd backend
-PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
-nohup /c/Users/glgld/.conda/envs/bbocr/python.exe -m uvicorn main:app \
-    --host "$BACKEND_HOST" \
-    --port "$BACKEND_PORT" \
-    > ../logs/backend.log 2>&1 &
-BACKEND_PID=$!
-echo "$BACKEND_PID" > ../logs/backend.pid
-cd ..
-echo "[OK] Backend started (PID: $BACKEND_PID)"
+if [ "$SKIP_BACKEND" = true ]; then
+    BACKEND_PID="(existing)"
+else
+    echo "[INFO] Starting backend server..."
+    cd backend
+    PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
+    nohup "$PYTHON_BIN" -m uvicorn main:app \
+        --host "$BACKEND_HOST" \
+        --port "$BACKEND_PORT" \
+        > ../logs/backend.log 2>&1 &
+    BACKEND_PID=$!
+    echo "$BACKEND_PID" > ../logs/backend.pid
+    cd ..
+    echo "[OK] Backend started (PID: $BACKEND_PID)"
+fi
 
 # ── Celery Worker 시작 ────────────────────────────────────
 echo "[INFO] Starting Celery OCR Worker..."
