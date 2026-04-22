@@ -129,7 +129,7 @@ def create_job_in_db(
             original_filename=filename,
             file_type=file_ext,
             file_size_bytes=file_size,
-            status="queued",
+            status="uploaded",
             raw_file_path=file_path,
             doc_type=doc_type  # 선택한 카테고리 저장
         )

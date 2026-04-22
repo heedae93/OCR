@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import Sidebar from '@/components/Sidebar'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { API_BASE_URL } from '@/lib/api'
@@ -35,7 +35,7 @@ interface Statistics {
   storage_used_mb: number
 }
 
-export default function JobsPage() {
+function JobsPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [groups, setGroups] = useState<SessionGroup[]>([])
@@ -160,10 +160,6 @@ export default function JobsPage() {
           alert(`업로드 실패: ${err.detail || file.name}`)
           continue
         }
-        const { job_id } = await res.json()
-
-        // 업로드 완료 후 바로 OCR 처리 시작
-        await fetch(`${API_BASE_URL}/api/process/${job_id}`, { method: 'POST' })
         setUploadProgress(prev => ({ ...prev, [uploadKey]: 100 }))
       } catch (e) {
         alert(`업로드 중 오류: ${file.name}`)
@@ -192,6 +188,20 @@ export default function JobsPage() {
       alert('재처리 요청 중 오류가 발생했습니다.')
     } finally {
       setReprocessingJobs(prev => { const s = new Set(prev); s.delete(jobId); return s })
+    }
+  }
+
+  const handleStartOCR = async (jobId: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/process/${jobId}`, { method: 'POST' })
+      if (res.ok) {
+        loadData(false)
+      } else {
+        const err = await res.json().catch(() => ({}))
+        alert(`OCR 시작 실패: ${err.detail || res.statusText}`)
+      }
+    } catch {
+      alert('OCR 시작 중 오류가 발생했습니다.')
     }
   }
 
@@ -522,59 +532,86 @@ export default function JobsPage() {
                           {group.jobs.map(job => (
                             <tr key={job.job_id} className="hover:bg-background-light dark:hover:bg-background-dark transition-colors">
                               <td className="px-6 py-4">
-                                <button onClick={() => router.push(`/editor/${job.job_id}`)}
-                                  className="text-sm font-medium text-primary hover:text-primary/80 text-left">
-                                  {job.filename}
-                                </button>
+                                {job.status === 'uploaded'
+                                  ? <span className="text-sm font-medium text-text-primary-light dark:text-text-primary-dark">{job.filename}</span>
+                                  : <button onClick={() => router.push(`/editor/${job.job_id}`)}
+                                      className="text-sm font-medium text-primary hover:text-primary/80 text-left">
+                                      {job.filename}
+                                    </button>
+                                }
                                 {job.is_double_column && (
                                   <span className="ml-2 px-2 py-0.5 bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded text-xs">더블 컬럼</span>
                                 )}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(job.status)}`}>
-                                  {getStatusText(job.status)}
-                                </span>
+                                {job.status === 'uploaded'
+                                  ? <span className="text-sm text-text-secondary-light dark:text-text-secondary-dark">-</span>
+                                  : <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(job.status)}`}>
+                                      {getStatusText(job.status)}
+                                    </span>
+                                }
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-text-secondary-light dark:text-text-secondary-dark">
-                                {job.total_pages}p
-                                {job.total_text_blocks && <div className="text-xs">{job.total_text_blocks} 블록</div>}
+                                {job.status === 'uploaded' ? '-' : (
+                                  <>
+                                    {job.total_pages}p
+                                    {job.total_text_blocks && <div className="text-xs">{job.total_text_blocks} 블록</div>}
+                                  </>
+                                )}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-text-secondary-light dark:text-text-secondary-dark">
-                                {formatDate(job.created_at)}
+                                {job.status === 'uploaded' ? '-' : formatDate(job.created_at)}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-text-secondary-light dark:text-text-secondary-dark">
-                                {formatDuration(job.processing_time_seconds)}
+                                {job.status === 'uploaded' ? '-' : formatDuration(job.processing_time_seconds)}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
-                                {job.status === 'completed' && job.pdf_url && (
-                                  <button
-                                    onClick={async () => {
-                                      const url = `${API_BASE_URL}${job.pdf_url}`
-                                      const res = await fetch(url)
-                                      const blob = await res.blob()
-                                      const a = document.createElement('a')
-                                      a.href = window.URL.createObjectURL(blob)
-                                      a.download = job.filename || `${job.job_id}.pdf`
-                                      a.click()
-                                      window.URL.revokeObjectURL(a.href)
-                                    }}
-                                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
-                                    다운로드
-                                  </button>
+                                {job.status === 'uploaded' ? (
+                                  <>
+                                    <button
+                                      onClick={() => handleStartOCR(job.job_id)}
+                                      className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 font-semibold"
+                                    >
+                                      OCR 시작
+                                    </button>
+                                    <button onClick={() => handleDelete(job.job_id)}
+                                      className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
+                                      삭제
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    {job.status === 'completed' && job.pdf_url && (
+                                      <button
+                                        onClick={async () => {
+                                          const url = `${API_BASE_URL}${job.pdf_url}`
+                                          const res = await fetch(url)
+                                          const blob = await res.blob()
+                                          const a = document.createElement('a')
+                                          a.href = window.URL.createObjectURL(blob)
+                                          a.download = job.filename || `${job.job_id}.pdf`
+                                          a.click()
+                                          window.URL.revokeObjectURL(a.href)
+                                        }}
+                                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                        다운로드
+                                      </button>
+                                    )}
+                                    {(job.status === 'completed' || job.status === 'failed') && (
+                                      <button
+                                        onClick={() => handleReprocess(job.job_id)}
+                                        disabled={reprocessingJobs.has(job.job_id)}
+                                        className="text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
+                                        {reprocessingJobs.has(job.job_id) ? '요청 중...' : 'OCR 재처리'}
+                                      </button>
+                                    )}
+                                    <button onClick={() => handleDelete(job.job_id)}
+                                      className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
+                                      삭제
+                                    </button>
+                                  </>
                                 )}
-                                {(job.status === 'completed' || job.status === 'failed') && (
-                                  <button
-                                    onClick={() => handleReprocess(job.job_id)}
-                                    disabled={reprocessingJobs.has(job.job_id)}
-                                    className="text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    {reprocessingJobs.has(job.job_id) ? '요청 중...' : 'OCR 재처리'}
-                                  </button>
-                                )}
-                                <button onClick={() => handleDelete(job.job_id)}
-                                  className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
-                                  삭제
-                                </button>
                               </td>
                             </tr>
                           ))}
@@ -589,5 +626,13 @@ export default function JobsPage() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function JobsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><span className="material-symbols-outlined animate-spin text-primary text-4xl">progress_activity</span></div>}>
+      <JobsPageInner />
+    </Suspense>
   )
 }

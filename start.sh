@@ -70,12 +70,14 @@ mkdir -p logs
 # ── Redis 확인 및 시작 ────────────────────────────────────
 echo "[INFO] Checking Redis..."
 
+PYTHON_BIN="/c/Users/glgld/.conda/envs/bbocr/python.exe"
+REDIS_URL="${REDIS_URL:-redis://localhost:6379/0}"
+
 redis_running() {
-    # Python redis 패키지로 실제 응답 확인 (redis-cli 없어도 동작)
-    python -c "
+    "$PYTHON_BIN" -c "
 import redis, sys
 try:
-    r = redis.from_url('${REDIS_URL:-redis://localhost:6379/0}')
+    r = redis.from_url('${REDIS_URL}')
     r.ping()
     sys.exit(0)
 except Exception:
@@ -83,28 +85,68 @@ except Exception:
 " 2>/dev/null
 }
 
-if redis_running; then
-    echo "[OK] Redis is already running"
-elif command -v redis-server &>/dev/null; then
-    nohup redis-server > logs/redis.log 2>&1 &
-    REDIS_PID=$!
-    echo "$REDIS_PID" > logs/redis.pid
-    # 실제로 응답할 때까지 대기 (최대 5초)
+wait_for_redis() {
     for i in 1 2 3 4 5; do
         sleep 1
         if redis_running; then
-            echo "[OK] Redis started (PID: $REDIS_PID)"
-            break
-        fi
-        if [ $i -eq 5 ]; then
-            echo "[ERROR] Redis started but not responding. Check logs/redis.log"
-            exit 1
+            return 0
         fi
     done
+    return 1
+}
+
+if redis_running; then
+    echo "[OK] Redis is already running"
+
+elif command -v redis-server &>/dev/null; then
+    # 로컬 redis-server가 있는 경우
+    nohup redis-server > logs/redis.log 2>&1 &
+    REDIS_PID=$!
+    echo "$REDIS_PID" > logs/redis.pid
+    if wait_for_redis; then
+        echo "[OK] Redis started locally (PID: $REDIS_PID)"
+    else
+        echo "[ERROR] Redis started but not responding. Check logs/redis.log"
+        exit 1
+    fi
+
+elif docker info &>/dev/null 2>&1; then
+    # Docker가 있는 경우
+    if docker ps -a --format '{{.Names}}' | grep -q "^bbocr-redis$"; then
+        docker start bbocr-redis > /dev/null 2>&1
+        echo "[OK] Redis container (bbocr-redis) restarted via Docker"
+    else
+        docker run -d --name bbocr-redis -p 6379:6379 redis:7 > /dev/null 2>&1
+        echo "[OK] Redis container started via Docker"
+    fi
+    if ! wait_for_redis; then
+        echo "[ERROR] Redis (Docker) not responding. Check: docker logs bbocr-redis"
+        exit 1
+    fi
+
+elif command -v wsl.exe &>/dev/null; then
+    # WSL Redis 시작 (wsl.exe -u root service redis-server start)
+    echo "[INFO] Trying Redis via WSL..."
+    wsl.exe -u root service redis-server start > /dev/null 2>&1
+    if wait_for_redis; then
+        echo "[OK] Redis started via WSL"
+    else
+        # WSL에 redis-server가 없으면 설치 시도
+        echo "[INFO] Installing redis-server in WSL..."
+        wsl.exe -u root bash -c "apt-get update -qq && apt-get install -y redis-server && service redis-server start" > logs/redis.log 2>&1
+        if wait_for_redis; then
+            echo "[OK] Redis installed and started via WSL"
+        else
+            echo "[ERROR] Redis (WSL) not responding. Check logs/redis.log"
+            exit 1
+        fi
+    fi
+
 else
-    echo "[ERROR] Redis is not running and redis-server is not installed."
-    echo "        Docker:  docker run -d -p 6379:6379 --name bbocr-redis redis"
-    echo "        WSL:     sudo apt install redis-server && sudo service redis start"
+    echo "[ERROR] Redis를 시작할 수 없습니다. 아래 중 하나를 설치하세요:"
+    echo "        Docker:  docker run -d -p 6379:6379 --name bbocr-redis redis:7"
+    echo "        WSL:     wsl -u root apt install redis-server"
+    echo "        Native:  redis-server (PATH에 있어야 함)"
     exit 1
 fi
 
@@ -145,7 +187,8 @@ echo "[OK] Backend started (PID: $BACKEND_PID)"
 # ── Celery Worker 시작 ────────────────────────────────────
 echo "[INFO] Starting Celery OCR Worker..."
 cd backend
-nohup python -m celery -A ocr_worker worker \
+PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
+nohup "$PYTHON_BIN" -m celery -A ocr_worker worker \
     -Q ocr \
     -n ocr_worker@%h \
     --loglevel=info \
