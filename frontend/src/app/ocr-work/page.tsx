@@ -4,6 +4,7 @@ import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from '
 
 import { useDropzone } from 'react-dropzone'
 import Sidebar from '@/components/Sidebar'
+import ThemeToggle from '@/components/ThemeToggle'
 import { useOcrActivity } from '@/contexts/OcrActivityContext'
 import {
   AlertCircle,
