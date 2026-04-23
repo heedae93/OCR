@@ -1,10 +1,6 @@
 'use client'
 
-<<<<<<< HEAD
 import { useState, useEffect, useRef, useMemo, Suspense } from 'react'
-=======
-import { useState, useEffect, useRef, Suspense, useMemo } from 'react'
->>>>>>> 740472e (ui 수저 ㅇ)
 import Sidebar from '@/components/Sidebar'
 import { useRouter } from 'next/navigation'
 import { API_BASE_URL } from '@/lib/api'
