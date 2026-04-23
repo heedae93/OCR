@@ -274,13 +274,16 @@ export default function OcrWorkPage() {
       <Sidebar />
       <main className="flex-1 ml-64 flex flex-col p-6 lg:p-10 min-w-0">
         <div className="w-full max-w-7xl mx-auto flex flex-col gap-6">
-          <div>
-            <h1 className="text-text-primary-light dark:text-text-primary-dark text-3xl font-bold leading-tight tracking-tight">
-              OCR 작업하기
-            </h1>
-            <p className="text-text-secondary-light dark:text-text-secondary-dark text-base mt-1">
-              파일 또는 폴더를 선택하고 OCR 작업을 Redis 큐에 등록합니다.
-            </p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-text-primary-light dark:text-text-primary-dark text-3xl font-bold leading-tight tracking-tight">
+                OCR 작업하기
+              </h1>
+              <p className="text-text-secondary-light dark:text-text-secondary-dark text-base mt-1">
+                파일 또는 폴더를 선택하고 OCR 작업을 Redis 큐에 등록합니다.
+              </p>
+            </div>
+            <ThemeToggle />
           </div>
 
           <div className="flex flex-col lg:flex-row gap-6">
